@@ -1,5 +1,5 @@
-import { useEffect } from 'react';
-import { View, StyleSheet } from 'react-native';
+import { useEffect, useState } from 'react';
+import { View, LayoutChangeEvent } from 'react-native';
 import Animated, { useSharedValue, useAnimatedStyle, withDelay, withTiming, Easing } from 'react-native-reanimated';
 
 interface Props {
@@ -11,27 +11,37 @@ interface Props {
 }
 
 export function AnimatedProgressBar({ pct, color, height = 4, delay = 300, backgroundColor = '#1a1a1a' }: Props) {
-  const width = useSharedValue(0);
+  const [containerWidth, setContainerWidth] = useState(0);
+  const widthAnim = useSharedValue(0);
 
   useEffect(() => {
-    width.value = withDelay(delay, withTiming(Math.min(pct, 100), {
+    if (containerWidth === 0) return;
+    const target = (Math.min(pct, 100) / 100) * containerWidth;
+    widthAnim.value = withDelay(delay, withTiming(target, {
       duration: 900,
       easing: Easing.out(Easing.cubic),
     }));
-  }, [pct]);
+  }, [pct, containerWidth]);
 
   const animStyle = useAnimatedStyle(() => ({
-    width: `${width.value}%`,
+    width: widthAnim.value,
   }));
 
+  function onLayout(e: LayoutChangeEvent) {
+    const w = e.nativeEvent.layout.width;
+    if (w > 0) setContainerWidth(w);
+  }
+
   return (
-    <View style={[styles.track, { height, backgroundColor, borderRadius: height / 2 }]}>
-      <Animated.View style={[styles.fill, animStyle, { height, backgroundColor: color, borderRadius: height / 2 }]} />
+    <View
+      onLayout={onLayout}
+      style={{ height, backgroundColor, borderRadius: height / 2, overflow: 'hidden', marginBottom: 10 }}
+    >
+      <Animated.View style={[{
+        height,
+        backgroundColor: color,
+        borderRadius: height / 2,
+      }, animStyle]} />
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  track: { overflow: 'hidden' },
-  fill: {},
-});
