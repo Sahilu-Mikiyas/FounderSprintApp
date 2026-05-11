@@ -20,7 +20,7 @@ export default function WelcomeScreen() {
           <Image
             source={require('../../assets/images/logo.jpg')}
             style={styles.logo}
-            resizeMode="contain"
+            resizeMode="cover"
           />
         </View>
 
@@ -86,18 +86,20 @@ const styles = StyleSheet.create({
   },
   logoWrap: {
     marginBottom: 28,
-    borderRadius: 24,
+    width: 160,
+    height: 160,
+    borderRadius: 32,
     overflow: 'hidden',
-    shadowColor: '#000',
+    shadowColor: '#22C55E',
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 12,
-    elevation: 8,
+    shadowOpacity: 0.25,
+    shadowRadius: 16,
+    elevation: 10,
+    alignSelf: 'center',
   },
   logo: {
-    width: 140,
-    height: 140,
-    borderRadius: 24,
+    width: '100%',
+    height: '100%',
   },
   title: {
     fontSize: 38,
