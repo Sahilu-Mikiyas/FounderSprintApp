@@ -1,6 +1,8 @@
+import 'react-native-url-polyfill/auto';
 import { useEffect } from 'react';
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { supabase } from '../lib/supabase';
 import { useAuthStore } from '../store/authStore';
 import { registerForPushNotifications, scheduleDailyReminder, scheduleEveningCheckIn } from '../lib/notifications';
@@ -9,7 +11,6 @@ export default function RootLayout() {
   const setSession = useAuthStore((s) => s.setSession);
 
   useEffect(() => {
-    // Auth listener
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
     });
@@ -17,7 +18,6 @@ export default function RootLayout() {
       (_event, session) => setSession(session)
     );
 
-    // Push notifications setup
     registerForPushNotifications().then((token) => {
       if (token) {
         scheduleDailyReminder(8, 0);
@@ -29,7 +29,7 @@ export default function RootLayout() {
   }, []);
 
   return (
-    <>
+    <GestureHandlerRootView style={{ flex: 1 }}>
       <StatusBar style="light" />
       <Stack screenOptions={{ headerShown: false }}>
         <Stack.Screen name="index" />
@@ -38,6 +38,6 @@ export default function RootLayout() {
         <Stack.Screen name="onboarding" options={{ animation: 'slide_from_right' }} />
         <Stack.Screen name="settings" options={{ animation: 'slide_from_right' }} />
       </Stack>
-    </>
+    </GestureHandlerRootView>
   );
 }
