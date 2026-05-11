@@ -4,12 +4,12 @@
     "slug": "foundersprintapp",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/icon.png",
+    "icon": "./assets/images/logo.jpg",
     "userInterfaceStyle": "dark",
     "newArchEnabled": true,
     "scheme": "foundersprint",
     "splash": {
-      "image": "./assets/splash-icon.png",
+      "image": "./assets/images/logo.jpg",
       "resizeMode": "contain",
       "backgroundColor": "#0A0A0A"
     },
@@ -19,7 +19,7 @@
     },
     "android": {
       "adaptiveIcon": {
-        "foregroundImage": "./assets/adaptive-icon.png",
+        "foregroundImage": "./assets/images/logo.jpg",
         "backgroundColor": "#0A0A0A"
       },
       "package": "com.foundersprint.app",
@@ -28,7 +28,7 @@
     },
     "web": {
       "bundler": "metro",
-      "favicon": "./assets/favicon.png"
+      "favicon": "./assets/images/logo.jpg"
     },
     "plugins": [
       "expo-router",
@@ -36,7 +36,7 @@
       [
         "expo-notifications",
         {
-          "icon": "./assets/icon.png",
+          "icon": "./assets/images/logo.jpg",
           "color": "#0A0A0A",
           "sounds": []
         }

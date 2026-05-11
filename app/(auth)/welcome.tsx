@@ -86,10 +86,18 @@ const styles = StyleSheet.create({
   },
   logoWrap: {
     marginBottom: 28,
+    borderRadius: 24,
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 12,
+    elevation: 8,
   },
   logo: {
     width: 140,
-    height: 64,
+    height: 140,
+    borderRadius: 24,
   },
   title: {
     fontSize: 38,
