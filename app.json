@@ -1,7 +1,7 @@
 {
   "expo": {
     "name": "FounderSprint",
-    "slug": "foundersprintapp",
+    "slug": "founders-sprint",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
@@ -44,7 +44,7 @@
     ],
     "extra": {
       "eas": {
-        "projectId": "57986064-581b-4d04-a956-dd8ce270d9e0"
+        "projectId": "ee64f50c-571b-4dda-acf9-51cf3fdec124"
       }
     }
   }
