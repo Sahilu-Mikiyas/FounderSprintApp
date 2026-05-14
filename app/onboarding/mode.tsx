@@ -65,7 +65,14 @@ export default function ModeScreen() {
           </View>
           <TouchableOpacity
             style={[styles.btnPrimary, !mode && styles.btnDisabled]}
-            onPress={() => mode && router.push('/onboarding/length')}
+            onPress={() => {
+              if (!mode) return;
+              if (mode === 'prebuilt') {
+                router.push('/onboarding/length');
+              } else {
+                router.push('/onboarding/plan');
+              }
+            }}
             disabled={!mode}
             activeOpacity={0.85}
           >

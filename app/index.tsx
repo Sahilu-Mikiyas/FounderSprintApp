@@ -13,6 +13,8 @@ export default function SplashScreen() {
   const [checking, setChecking] = useState(true);
   const [onboarded, setOnboarded] = useState(false);
 
+  const splashStart = useRef(Date.now());
+
   // Animation values
   const logoOpacity = useRef(new Animated.Value(0)).current;
   const logoScale = useRef(new Animated.Value(0.8)).current;
@@ -63,9 +65,13 @@ export default function SplashScreen() {
     }, 1500);
   }, []);
 
-  // Navigate after 5 seconds once we know auth state
+  // Navigate after splash — minimum 2.5s for animation, then go as soon as auth is known
   useEffect(() => {
     if (checking) return;
+    // Give at least 2.5s for the splash animation to play
+    const minDelay = 2500;
+    const elapsed = Date.now() - splashStart.current;
+    const remaining = Math.max(0, minDelay - elapsed);
     const timer = setTimeout(() => {
       if (!session) {
         router.replace('/(auth)/welcome');
@@ -74,7 +80,7 @@ export default function SplashScreen() {
       } else {
         router.replace('/(tabs)/today');
       }
-    }, 5000);
+    }, remaining);
     return () => clearTimeout(timer);
   }, [checking, session, onboarded]);
 

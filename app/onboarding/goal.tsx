@@ -11,7 +11,7 @@ const QUICK_GOALS = [1000, 2500, 5000, 10000];
 
 export default function GoalScreen() {
   const router = useRouter();
-  const { mode, durationDays, revenueGoal, setRevenueGoal, reset } = useOnboardingStore();
+  const { mode, durationDays, revenueGoal, dayTypes, setRevenueGoal, reset } = useOnboardingStore();
   const { user } = useAuthStore();
   const [loading, setLoading] = useState(false);
   const [custom, setCustom] = useState(false);
@@ -50,42 +50,54 @@ export default function GoalScreen() {
       return;
     }
 
-    // Generate sprint days
+    // Generate sprint days using selected day type rotation
+    const rotationPattern = dayTypes.length > 0 ? dayTypes : ['deep_work'];
     const days = Array.from({ length: durationDays }, (_, i) => {
       const d = new Date(startDate);
       d.setDate(d.getDate() + i);
-      const dayNum = i + 1;
-      // Assign day types in a rotation pattern
-      const types = ['deep_work', 'deep_work', 'fyp', 'deep_work', 'review', 'deep_work', 'deep_work'];
       return {
         sprint_id: sprint.id,
         user_id: user.id,
-        day_number: dayNum,
+        day_number: i + 1,
         date: fmt(d),
-        day_type: types[i % types.length],
+        day_type: rotationPattern[i % rotationPattern.length],
         status: i === 0 ? 'active' : 'todo',
       };
     });
 
     await supabase.from('sprint_days').insert(days);
 
-    // Seed default routine
-    const routine = [
-      { user_id: user.id, title: 'Morning review', duration_minutes: 5, sort_order: 0 },
-      { user_id: user.id, title: 'Set top 3 priorities', duration_minutes: 5, sort_order: 1 },
-      { user_id: user.id, title: 'Deep work block 1', duration_minutes: 90, sort_order: 2 },
-      { user_id: user.id, title: 'Outreach & comms', duration_minutes: 30, sort_order: 3 },
-      { user_id: user.id, title: 'Deep work block 2', duration_minutes: 60, sort_order: 4 },
-      { user_id: user.id, title: 'Pipeline check', duration_minutes: 15, sort_order: 5 },
-      { user_id: user.id, title: 'End-of-day log', duration_minutes: 10, sort_order: 6 },
-    ];
-    await supabase.from('routine_items').insert(routine);
+    // Seed default routine only if user has none yet
+    const { count } = await supabase
+      .from('routine_items')
+      .select('id', { count: 'exact', head: true })
+      .eq('user_id', user.id);
 
-    // Mark onboarding complete
-    await supabase
+    if (!count || count === 0) {
+      const routine = [
+        { user_id: user.id, title: 'Morning review', duration_minutes: 5, sort_order: 0 },
+        { user_id: user.id, title: 'Set top 3 priorities', duration_minutes: 5, sort_order: 1 },
+        { user_id: user.id, title: 'Deep work block 1', duration_minutes: 90, sort_order: 2 },
+        { user_id: user.id, title: 'Outreach & comms', duration_minutes: 30, sort_order: 3 },
+        { user_id: user.id, title: 'Deep work block 2', duration_minutes: 60, sort_order: 4 },
+        { user_id: user.id, title: 'Pipeline check', duration_minutes: 15, sort_order: 5 },
+        { user_id: user.id, title: 'End-of-day log', duration_minutes: 10, sort_order: 6 },
+      ];
+      await supabase.from('routine_items').insert(routine);
+    }
+
+    // Mark onboarding complete — upsert to be safe
+    const { error: profileErr } = await supabase
       .from('profiles')
-      .update({ onboarding_complete: true })
-      .eq('id', user.id);
+      .upsert({ id: user.id, onboarding_complete: true });
+
+    if (profileErr) {
+      // Try update as fallback
+      await supabase
+        .from('profiles')
+        .update({ onboarding_complete: true })
+        .eq('id', user.id);
+    }
 
     reset();
     setLoading(false);
@@ -100,7 +112,7 @@ export default function GoalScreen() {
         </TouchableOpacity>
 
         <View style={styles.header}>
-          <Text style={styles.step}>Step 3 of 3</Text>
+          <Text style={styles.step}>{mode === 'prebuilt' ? 'Step 3 of 3' : 'Step 4 of 4'}</Text>
           <Text style={styles.title}>Set your sprint{'\n'}revenue goal</Text>
           <Text style={styles.sub}>This drives your weekly KPI targets</Text>
         </View>
@@ -177,6 +189,7 @@ export default function GoalScreen() {
         <View style={styles.footer}>
           <View style={styles.dots}>
             <View style={styles.dot} />
+            {mode !== 'prebuilt' && <View style={styles.dot} />}
             <View style={styles.dot} />
             <View style={[styles.dot, styles.dotActive]} />
           </View>

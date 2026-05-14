@@ -14,7 +14,8 @@ const LENGTHS = [
 
 export default function LengthScreen() {
   const router = useRouter();
-  const { durationDays, setDuration } = useOnboardingStore();
+  const { mode, durationDays, setDuration } = useOnboardingStore();
+  const stepLabel = mode === 'prebuilt' ? 'Step 2 of 3' : 'Step 3 of 4';
 
   return (
     <SafeAreaView style={styles.container}>
@@ -24,7 +25,7 @@ export default function LengthScreen() {
         </TouchableOpacity>
 
         <View style={styles.header}>
-          <Text style={styles.step}>Step 2 of 3</Text>
+          <Text style={styles.step}>{stepLabel}</Text>
           <Text style={styles.title}>How long is{'\n'}your sprint?</Text>
           <Text style={styles.sub}>You can extend or restart at any time</Text>
         </View>
@@ -54,6 +55,7 @@ export default function LengthScreen() {
         <View style={styles.footer}>
           <View style={styles.dots}>
             <View style={styles.dot} />
+            {mode !== 'prebuilt' && <View style={styles.dot} />}
             <View style={[styles.dot, styles.dotActive]} />
             <View style={styles.dot} />
           </View>
