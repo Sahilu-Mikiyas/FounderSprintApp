@@ -32,7 +32,7 @@ const STATUS_STYLES: Record<LeadStatus, { label: string; color: string; bg: stri
   interested:  { label: 'Interested',  color: colors.learning,    bg: 'rgba(234,179,8,0.12)'  },
   negotiating: { label: 'Negotiating', color: colors.development, bg: 'rgba(249,115,22,0.12)' },
   closed:      { label: 'Closed ✓',   color: colors.revenue,     bg: 'rgba(34,197,94,0.12)'  },
-  lost:        { label: 'Lost',        color: '#555',             bg: 'rgba(80,80,80,0.12)'   },
+  lost:        { label: 'Lost',        color: '#EF4444',          bg: 'rgba(239,68,68,0.12)'  },
 };
 
 const FILTER_STATUSES = ['all', ...STATUSES] as const;
@@ -200,8 +200,21 @@ export default function PipelineScreen() {
           {/* Follow up today */}
           {followUpToday.length > 0 && filter === 'all' && (
             <>
-              <Text style={styles.sectionTitle}>Follow Up Today 🔔</Text>
-              {followUpToday.map((lead) => <LeadCard key={lead.id} lead={lead} onPress={() => openEdit(lead)} urgent />)}
+              <View style={styles.followUpHeader}>
+                <Text style={styles.followUpTitle}>🔔 Follow Up Today</Text>
+                <View style={styles.followUpBadge}>
+                  <Text style={styles.followUpBadgeText}>{followUpToday.length}</Text>
+                </View>
+              </View>
+              {followUpToday.map((lead) => (
+                <LeadCard
+                  key={lead.id}
+                  lead={lead}
+                  onPress={() => openEdit(lead)}
+                  onLongPress={() => deleteLead(lead.id)}
+                  urgent
+                />
+              ))}
             </>
           )}
 
@@ -219,7 +232,11 @@ export default function PipelineScreen() {
           ) : (
             filtered.map((lead, idx) => (
               <AnimatedCard key={lead.id} delay={idx * 50}>
-                <LeadCard lead={lead} onPress={() => openEdit(lead)} />
+                <LeadCard
+                  lead={lead}
+                  onPress={() => openEdit(lead)}
+                  onLongPress={() => deleteLead(lead.id)}
+                />
               </AnimatedCard>
             ))
           )}
@@ -284,12 +301,21 @@ export default function PipelineScreen() {
   );
 }
 
-function LeadCard({ lead, onPress, urgent }: { lead: Lead; onPress: () => void; urgent?: boolean }) {
+function LeadCard({
+  lead, onPress, onLongPress, urgent,
+}: {
+  lead: Lead; onPress: () => void; onLongPress?: () => void; urgent?: boolean;
+}) {
   const st = STATUS_STYLES[lead.status as LeadStatus] ?? STATUS_STYLES.new;
+  const todayStr = new Date().toISOString().split('T')[0];
+  const followUpDue = lead.follow_up_date && lead.follow_up_date <= todayStr;
+
   return (
     <TouchableOpacity
       style={[styles.leadCard, urgent && styles.leadCardUrgent]}
       onPress={onPress}
+      onLongPress={onLongPress}
+      delayLongPress={450}
       activeOpacity={0.8}
     >
       <View style={[styles.avatar, { backgroundColor: `${st.color}15` }]}>
@@ -297,10 +323,19 @@ function LeadCard({ lead, onPress, urgent }: { lead: Lead; onPress: () => void; 
       </View>
       <View style={styles.leadInfo}>
         <Text style={styles.leadName}>{lead.name}</Text>
-        <Text style={styles.leadBiz}>{lead.business ?? ''}{lead.service_type ? ` · ${lead.service_type}` : ''}</Text>
+        <Text style={styles.leadBiz}>
+          {lead.business ?? ''}{lead.service_type ? ` · ${lead.service_type}` : ''}
+        </Text>
+        {lead.follow_up_date ? (
+          <Text style={[styles.followUpDate, followUpDue && styles.followUpDueRed]}>
+            🗓 {lead.follow_up_date}
+          </Text>
+        ) : null}
       </View>
       <View style={styles.leadRight}>
-        <Text style={[styles.leadVal, { color: colors.revenue }]}>${lead.value.toLocaleString()}</Text>
+        {lead.value > 0 && (
+          <Text style={[styles.leadVal, { color: colors.revenue }]}>${lead.value.toLocaleString()}</Text>
+        )}
         <View style={[styles.statusBadge, { backgroundColor: st.bg }]}>
           <Text style={[styles.statusBadgeText, { color: st.color }]}>{st.label}</Text>
         </View>
@@ -354,7 +389,13 @@ const styles = StyleSheet.create({
   emptyTitle: { fontSize: 18, fontWeight: '800', color: colors.white },
   emptySub: { fontSize: 13, color: colors.grey600, textAlign: 'center' },
   leadCard: { backgroundColor: '#111', borderWidth: 1, borderColor: '#1a1a1a', borderRadius: 16, padding: 14, flexDirection: 'row', alignItems: 'center', gap: 12 },
-  leadCardUrgent: { borderColor: '#2a1a1a', backgroundColor: '#110808' },
+  leadCardUrgent: { borderColor: 'rgba(239,68,68,0.4)', backgroundColor: '#130808' },
+  followUpHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 4 },
+  followUpTitle: { fontSize: 11, fontWeight: '700', color: '#EF4444', textTransform: 'uppercase', letterSpacing: 1.5 },
+  followUpBadge: { backgroundColor: 'rgba(239,68,68,0.15)', borderRadius: 10, paddingVertical: 2, paddingHorizontal: 7 },
+  followUpBadgeText: { fontSize: 11, fontWeight: '800', color: '#EF4444' },
+  followUpDate: { fontSize: 11, color: '#444', marginTop: 3, fontWeight: '500' },
+  followUpDueRed: { color: '#EF4444' },
   avatar: { width: 42, height: 42, borderRadius: 13, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
   avatarText: { fontSize: 14, fontWeight: '800' },
   leadInfo: { flex: 1 },
