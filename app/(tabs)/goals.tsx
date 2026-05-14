@@ -49,12 +49,12 @@ const CAT_META: Record<GoalCategory, { label: string; emoji: string; color: stri
 };
 
 function daysLeft(deadline: string) {
-  const diff = new Date(deadline).getTime() - new Date().getTime();
+  const diff = new Date(deadline + 'T00:00:00').getTime() - new Date().getTime();
   return Math.max(0, Math.ceil(diff / 86400000));
 }
 
 function formatDeadline(dateStr: string) {
-  return new Date(dateStr).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+  return new Date(dateStr + 'T00:00:00').toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
 }
 
 function getProgress(goal: Goal) {
@@ -138,6 +138,12 @@ export default function GoalsScreen() {
       status: 'active',
     };
 
+    // Enforce only 1 pinned goal at a time
+    if (form.is_pinned) {
+      await supabase.from('goals').update({ is_pinned: false }).eq('user_id', user.id).neq('id', editGoal?.id ?? '00000000-0000-0000-0000-000000000000');
+      setGoals((prev) => prev.map((g) => ({ ...g, is_pinned: false })));
+    }
+
     if (editGoal) {
       const { data } = await supabase.from('goals').update(payload).eq('id', editGoal.id).select().single();
       if (data) setGoals((prev) => prev.map((g) => g.id === editGoal.id ? data : g));
@@ -202,7 +208,7 @@ export default function GoalsScreen() {
   }
 
   const pinned = goals.find((g) => g.is_pinned && g.status === 'active');
-  const active = goals.filter((g) => g.status === 'active');
+  const active = goals.filter((g) => g.status === 'active' && !g.is_pinned);
   const completed = goals.filter((g) => g.status === 'completed');
 
   return (
@@ -210,7 +216,7 @@ export default function GoalsScreen() {
       <View style={styles.header}>
         <View>
           <Text style={styles.title}>🎯 Goals</Text>
-          <Text style={styles.subtitle}>{active.length} active · {completed.length} completed</Text>
+          <Text style={styles.subtitle}>{goals.filter(g => g.status === 'active').length} active · {completed.length} completed</Text>
         </View>
         <TouchableOpacity style={styles.addBtn} onPress={() => openAdd()}>
           <Text style={styles.addBtnText}>+ New</Text>
@@ -300,17 +306,22 @@ export default function GoalsScreen() {
                       <Text style={styles.daysLbl}>left</Text>
                     </View>
                   </View>
-                  {goal.financial_target && (
-                    <View style={styles.goalMiniBar}>
-                      <View style={styles.goalMiniLabels}>
-                        <Text style={styles.goalMiniLeft}>${goal.current_amount.toLocaleString()} / ${goal.financial_target.toLocaleString()}</Text>
-                        <Text style={[styles.goalMiniPct, { color: meta.color }]}>{pct}%</Text>
+                  <View style={styles.goalCardBottom}>
+                    {goal.financial_target ? (
+                      <View style={styles.goalMiniBar}>
+                        <View style={styles.goalMiniLabels}>
+                          <Text style={styles.goalMiniLeft}>${goal.current_amount.toLocaleString()} / ${goal.financial_target.toLocaleString()}</Text>
+                          <Text style={[styles.goalMiniPct, { color: meta.color }]}>{pct}%</Text>
+                        </View>
+                        <AnimatedProgressBar pct={pct} color={meta.color} height={3} delay={200} />
                       </View>
-                      <View style={styles.goalMiniTrack}>
-                        <View style={[styles.goalMiniFill, { width: `${pct}%`, backgroundColor: meta.color }]} />
-                      </View>
-                    </View>
-                  )}
+                    ) : null}
+                    {(milestones[goal.id]?.length ?? 0) > 0 && (
+                      <Text style={styles.milestoneCount}>
+                        {milestones[goal.id].filter((m) => m.is_complete).length}/{milestones[goal.id].length} milestones
+                      </Text>
+                    )}
+                  </View>
                 </View>
               </TouchableOpacity>
             );
@@ -380,18 +391,18 @@ export default function GoalsScreen() {
                     <View style={styles.detailProgress}>
                       <View style={styles.detailProgressLabels}>
                         <Text style={styles.detailProgressLeft}>
-                          ${selectedGoal.current_amount.toLocaleString()} saved of ${selectedGoal.financial_target.toLocaleString()}
+                          ${selectedGoal.current_amount.toLocaleString()} of ${selectedGoal.financial_target.toLocaleString()}
                         </Text>
                         <Text style={[styles.detailProgressPct, { color: CAT_META[selectedGoal.category as GoalCategory]?.color }]}>
                           {getProgress(selectedGoal)}%
                         </Text>
                       </View>
-                      <View style={styles.detailTrack}>
-                        <View style={[styles.detailFill, {
-                          width: `${getProgress(selectedGoal)}%`,
-                          backgroundColor: CAT_META[selectedGoal.category as GoalCategory]?.color,
-                        }]} />
-                      </View>
+                      <AnimatedProgressBar
+                        pct={getProgress(selectedGoal)}
+                        color={CAT_META[selectedGoal.category as GoalCategory]?.color ?? colors.grey600}
+                        height={5}
+                        delay={200}
+                      />
                       <TouchableOpacity
                         style={styles.updateAmountBtn}
                         onPress={() => { setUpdateAmount(String(selectedGoal.current_amount)); setShowUpdateAmount(true); }}
@@ -444,6 +455,29 @@ export default function GoalsScreen() {
                       </TouchableOpacity>
                     </View>
                   </View>
+
+                  {/* Pin toggle */}
+                  {selectedGoal.status === 'active' && (
+                    <TouchableOpacity
+                      style={[styles.pinToggleRow, selectedGoal.is_pinned && styles.pinToggleRowOn]}
+                      onPress={async () => {
+                        const newPinned = !selectedGoal.is_pinned;
+                        if (newPinned) {
+                          await supabase.from('goals').update({ is_pinned: false }).eq('user_id', user?.id ?? '').neq('id', selectedGoal.id);
+                          setGoals((prev) => prev.map((g) => ({ ...g, is_pinned: g.id === selectedGoal.id ? true : false })));
+                        } else {
+                          await supabase.from('goals').update({ is_pinned: false }).eq('id', selectedGoal.id);
+                          setGoals((prev) => prev.map((g) => g.id === selectedGoal.id ? { ...g, is_pinned: false } : g));
+                        }
+                        setSelectedGoal((prev) => prev ? { ...prev, is_pinned: newPinned } : null);
+                      }}
+                    >
+                      <Text style={styles.pinToggleText}>📌 {selectedGoal.is_pinned ? 'Unpin goal' : 'Pin as main goal'}</Text>
+                      <View style={[styles.toggle, selectedGoal.is_pinned && styles.toggleOn]}>
+                        <View style={[styles.toggleThumb, selectedGoal.is_pinned && styles.toggleThumbOn]} />
+                      </View>
+                    </TouchableOpacity>
+                  )}
 
                   {/* Complete goal */}
                   {selectedGoal.status === 'active' && (
@@ -603,12 +637,12 @@ const styles = StyleSheet.create({
   goalDeadline: { fontSize: 11, color: '#444' },
   daysLeft: { fontSize: 16, fontWeight: '900' },
   daysLbl: { fontSize: 10, color: '#444', fontWeight: '600' },
+  goalCardBottom: { gap: 8 },
   goalMiniBar: { gap: 4 },
   goalMiniLabels: { flexDirection: 'row', justifyContent: 'space-between' },
   goalMiniLeft: { fontSize: 10, color: '#444' },
   goalMiniPct: { fontSize: 10, fontWeight: '700' },
-  goalMiniTrack: { height: 3, backgroundColor: '#1a1a1a', borderRadius: 2, overflow: 'hidden' },
-  goalMiniFill: { height: '100%', borderRadius: 2 },
+  milestoneCount: { fontSize: 10, color: '#333', fontWeight: '600' },
 
   modalOverlay: { flex: 1, justifyContent: 'flex-end' },
   modalBg: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.65)' },
@@ -626,8 +660,6 @@ const styles = StyleSheet.create({
   detailProgressLabels: { flexDirection: 'row', justifyContent: 'space-between' },
   detailProgressLeft: { fontSize: 12, color: '#555' },
   detailProgressPct: { fontSize: 12, fontWeight: '700' },
-  detailTrack: { height: 5, backgroundColor: '#1a1a1a', borderRadius: 3, overflow: 'hidden' },
-  detailFill: { height: '100%', borderRadius: 3 },
   updateAmountBtn: { alignSelf: 'flex-start', paddingVertical: 7, paddingHorizontal: 14, backgroundColor: '#1a1a1a', borderRadius: 10, marginTop: 4 },
   updateAmountText: { fontSize: 12, fontWeight: '700', color: colors.white },
   motivationCard: { backgroundColor: '#0d0d0d', borderRadius: 14, padding: 16, gap: 6 },
@@ -646,6 +678,9 @@ const styles = StyleSheet.create({
   addMilestoneInput: { flex: 1, backgroundColor: '#161616', borderRadius: 10, paddingHorizontal: 14, paddingVertical: 10, fontSize: 13, color: colors.white },
   addMilestoneBtn: { width: 38, height: 38, backgroundColor: colors.white, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
   addMilestoneBtnText: { fontSize: 20, fontWeight: '700', color: colors.black },
+  pinToggleRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#1a1a1a', borderRadius: 14, padding: 14, borderWidth: 1, borderColor: '#2a2a2a' },
+  pinToggleRowOn: { borderColor: colors.fyp, backgroundColor: 'rgba(99,102,241,0.08)' },
+  pinToggleText: { fontSize: 13, fontWeight: '600', color: colors.white },
   completeBtn: { height: 50, backgroundColor: '#0d0d0d', borderWidth: 1, borderColor: colors.revenue, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
   completeBtnText: { fontSize: 14, fontWeight: '700', color: colors.revenue },
 
