@@ -2,7 +2,7 @@ import { useEffect, useState, useCallback } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity, StyleSheet,
   ActivityIndicator, RefreshControl, Modal, TextInput,
-  KeyboardAvoidingView, Platform, Alert, Dimensions,
+  KeyboardAvoidingView, Platform, Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuthStore } from '../../store/authStore';
@@ -10,8 +10,7 @@ import { useSprintStore } from '../../store/sprintStore';
 import { supabase } from '../../lib/supabase';
 import { colors } from '../../lib/colors';
 import { AnimatedCard } from '../../components/AnimatedCard';
-
-const { width } = Dimensions.get('window');
+import { AnimatedProgressBar } from '../../components/AnimatedProgressBar';
 
 interface RevenueEntry {
   id: string;
@@ -27,22 +26,21 @@ const TYPES = ['website', 'social_media', 'consulting', 'editing', 'ecommerce', 
 type RevenueType = typeof TYPES[number];
 
 const TYPE_META: Record<RevenueType, { label: string; emoji: string; color: string }> = {
-  website:      { label: 'Website',      emoji: '🌐', color: colors.clients },
-  social_media: { label: 'Social Media', emoji: '📱', color: colors.content },
-  consulting:   { label: 'Consulting',   emoji: '💼', color: colors.revenue },
-  editing:      { label: 'Editing',      emoji: '✂️', color: colors.development },
-  ecommerce:    { label: 'Ecommerce',    emoji: '🛍', color: colors.learning },
-  freelance:    { label: 'Freelance',    emoji: '✍️', color: colors.habit },
-  other:        { label: 'Other',        emoji: '📦', color: colors.grey600 },
+  website:      { label: 'Website',      emoji: '🌐', color: '#3B82F6' },
+  social_media: { label: 'Social Media', emoji: '📱', color: '#EC4899' },
+  consulting:   { label: 'Consulting',   emoji: '💼', color: '#F59E0B' },
+  editing:      { label: 'Editing',      emoji: '✂️', color: '#14B8A6' },
+  ecommerce:    { label: 'Ecommerce',    emoji: '🛍', color: '#8B5CF6' },
+  freelance:    { label: 'Freelance',    emoji: '✍️', color: colors.revenue },
+  other:        { label: 'Other',        emoji: '📦', color: '#64748B' },
 };
 
-function formatCurrency(n: number) {
-  if (n >= 1000) return `$${(n / 1000).toFixed(1)}K`;
+function fmt(n: number) {
   return `$${n.toLocaleString()}`;
 }
 
-function formatDate(dateStr: string) {
-  return new Date(dateStr).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+function fmtDate(dateStr: string) {
+  return new Date(dateStr + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 }
 
 function getWeekTotal(entries: RevenueEntry[]) {
@@ -50,22 +48,20 @@ function getWeekTotal(entries: RevenueEntry[]) {
   const weekStart = new Date(now);
   weekStart.setDate(now.getDate() - now.getDay());
   weekStart.setHours(0, 0, 0, 0);
-  return entries
-    .filter((e) => new Date(e.date) >= weekStart)
-    .reduce((s, e) => s + e.amount, 0);
+  return entries.filter((e) => new Date(e.date + 'T00:00:00') >= weekStart).reduce((s, e) => s + e.amount, 0);
 }
 
 function getMonthTotal(entries: RevenueEntry[]) {
   const now = new Date();
   return entries
     .filter((e) => {
-      const d = new Date(e.date);
+      const d = new Date(e.date + 'T00:00:00');
       return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
     })
     .reduce((s, e) => s + e.amount, 0);
 }
 
-function getTypeBreakdown(entries: RevenueEntry[]) {
+function getTypeBreakdown(entries: RevenueEntry[]): Partial<Record<RevenueType, number>> {
   const totals: Partial<Record<RevenueType, number>> = {};
   entries.forEach((e) => {
     totals[e.type as RevenueType] = (totals[e.type as RevenueType] ?? 0) + e.amount;
@@ -80,11 +76,17 @@ export default function RevenueScreen() {
   const [loading, setLoading] = useState(true);
   const [showAdd, setShowAdd] = useState(false);
   const [editEntry, setEditEntry] = useState<RevenueEntry | null>(null);
-  const [form, setForm] = useState({ amount: '', type: 'consulting' as RevenueType, client_name: '', notes: '', date: new Date().toISOString().split('T')[0] });
+  const [form, setForm] = useState({
+    amount: '',
+    type: 'consulting' as RevenueType,
+    client_name: '',
+    notes: '',
+    date: new Date().toISOString().split('T')[0],
+  });
   const [saving, setSaving] = useState(false);
 
   const fetchEntries = useCallback(async () => {
-    if (!user || !sprint) return;
+    if (!user || !sprint) { setLoading(false); return; }
     setLoading(true);
     const { data } = await supabase
       .from('revenue_entries')
@@ -101,10 +103,12 @@ export default function RevenueScreen() {
   const sprintTotal = entries.reduce((s, e) => s + e.amount, 0);
   const revenueGoal = sprint?.revenue_goal ?? 0;
   const goalPct = revenueGoal > 0 ? Math.min(Math.round((sprintTotal / revenueGoal) * 100), 100) : 0;
+  const remaining = Math.max(0, revenueGoal - sprintTotal);
   const weekTotal = getWeekTotal(entries);
   const monthTotal = getMonthTotal(entries);
   const typeBreakdown = getTypeBreakdown(entries);
-  const maxBarVal = Math.max(...Object.values(typeBreakdown).map(Number), 1);
+  const maxTypeVal = Math.max(...Object.values(typeBreakdown).map(Number), 1);
+  const activeTypes = TYPES.filter((t) => (typeBreakdown[t] ?? 0) > 0);
 
   function openAdd() {
     setEditEntry(null);
@@ -136,13 +140,12 @@ export default function RevenueScreen() {
       notes: form.notes || null,
       date: form.date,
     };
-
     if (editEntry) {
       const { data } = await supabase.from('revenue_entries').update(payload).eq('id', editEntry.id).select().single();
       if (data) setEntries((prev) => prev.map((e) => e.id === editEntry.id ? data : e));
     } else {
       const { data } = await supabase.from('revenue_entries').insert(payload).select().single();
-      if (data) setEntries((prev) => [data, ...prev]);
+      if (data) setEntries((prev) => [data, ...prev].sort((a, b) => b.date.localeCompare(a.date)));
     }
     setSaving(false);
     setShowAdd(false);
@@ -161,12 +164,25 @@ export default function RevenueScreen() {
     ]);
   }
 
+  if (!sprint) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.centered}>
+          <Text style={styles.emptyIcon}>💰</Text>
+          <Text style={styles.emptyTitle}>No active sprint</Text>
+          <Text style={styles.emptySub}>Start a sprint to track your revenue</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
   return (
     <SafeAreaView style={styles.container}>
+      {/* ── Header ── */}
       <View style={styles.header}>
         <View>
           <Text style={styles.title}>💰 Revenue</Text>
-          <Text style={styles.subtitle}>Sprint · {new Date().toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}</Text>
+          <Text style={styles.subtitle}>{new Date().toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}</Text>
         </View>
         <TouchableOpacity style={styles.addBtn} onPress={openAdd}>
           <Text style={styles.addBtnText}>+ Log</Text>
@@ -181,36 +197,44 @@ export default function RevenueScreen() {
           refreshControl={<RefreshControl refreshing={loading} onRefresh={fetchEntries} tintColor={colors.white} />}
           contentContainerStyle={styles.listContent}
         >
-          {/* Hero card */}
+          {/* ── Hero card ── */}
           <View style={styles.heroCard}>
-            <Text style={styles.heroLabel}>Sprint Total</Text>
+            <Text style={styles.heroLabel}>Sprint Revenue</Text>
             <Text style={styles.heroAmount}>
               $<Text style={{ color: colors.revenue }}>{sprintTotal.toLocaleString()}</Text>
             </Text>
             {revenueGoal > 0 && (
-              <Text style={styles.heroSub}>of ${revenueGoal.toLocaleString()} goal</Text>
-            )}
-            {revenueGoal > 0 && (
-              <View style={styles.goalBarWrap}>
-                <View style={styles.goalTrack}>
-                  <View style={[styles.goalFill, { width: `${goalPct}%` }]} />
+              <>
+                <Text style={styles.heroSub}>of {fmt(revenueGoal)} goal</Text>
+                <View style={styles.heroBarWrap}>
+                  <AnimatedProgressBar
+                    pct={goalPct}
+                    color={goalPct >= 100 ? colors.revenue : sprintTotal / revenueGoal >= 0.5 ? colors.revenue : '#F97316'}
+                    height={6}
+                    delay={300}
+                  />
                 </View>
-                <View style={styles.goalLabels}>
-                  <Text style={styles.goalLabel}>{goalPct}% of goal</Text>
-                  <Text style={styles.goalLabel}>${(revenueGoal - sprintTotal).toLocaleString()} to go</Text>
+                <View style={styles.heroMeta}>
+                  <Text style={styles.heroMetaText}>{goalPct}% of goal</Text>
+                  {remaining > 0 && (
+                    <Text style={styles.heroMetaText}>{fmt(remaining)} to go</Text>
+                  )}
+                  {remaining === 0 && (
+                    <Text style={[styles.heroMetaText, { color: colors.revenue }]}>🎉 Goal reached!</Text>
+                  )}
                 </View>
-              </View>
+              </>
             )}
           </View>
 
-          {/* Stats row */}
+          {/* ── Stats row ── */}
           <View style={styles.statsRow}>
             <View style={styles.statCard}>
-              <Text style={styles.statVal}>${monthTotal.toLocaleString()}</Text>
+              <Text style={styles.statVal}>{fmt(monthTotal)}</Text>
               <Text style={styles.statLbl}>This Month</Text>
             </View>
             <View style={styles.statCard}>
-              <Text style={styles.statVal}>${weekTotal.toLocaleString()}</Text>
+              <Text style={styles.statVal}>{fmt(weekTotal)}</Text>
               <Text style={styles.statLbl}>This Week</Text>
             </View>
             <View style={styles.statCard}>
@@ -219,31 +243,22 @@ export default function RevenueScreen() {
             </View>
           </View>
 
-          {/* Bar chart by type */}
-          {entries.length > 0 && (
+          {/* ── Type breakdown (horizontal bars) ── */}
+          {activeTypes.length > 0 && (
             <View style={styles.chartCard}>
-              <Text style={styles.chartLabel}>Revenue by Type</Text>
-              <View style={styles.bars}>
-                {TYPES.map((type) => {
+              <Text style={styles.chartTitle}>Revenue by Type</Text>
+              <View style={styles.chartRows}>
+                {activeTypes.map((type, i) => {
+                  const meta = TYPE_META[type];
                   const val = typeBreakdown[type] ?? 0;
-                  const pct = Math.round((val / maxBarVal) * 100);
-                  const meta = TYPE_META[type];
+                  const pct = Math.round((val / maxTypeVal) * 100);
                   return (
-                    <View key={type} style={styles.barWrap}>
-                      <View style={[styles.bar, { height: Math.max(pct * 0.8, val > 0 ? 4 : 0), backgroundColor: meta.color }]} />
-                      <Text style={styles.barLbl}>{meta.emoji}</Text>
-                    </View>
-                  );
-                })}
-              </View>
-              {/* Legend */}
-              <View style={styles.legend}>
-                {TYPES.filter((t) => (typeBreakdown[t] ?? 0) > 0).map((type) => {
-                  const meta = TYPE_META[type];
-                  return (
-                    <View key={type} style={styles.legendItem}>
-                      <View style={[styles.legendDot, { backgroundColor: meta.color }]} />
-                      <Text style={styles.legendText}>{meta.label}: ${(typeBreakdown[type] ?? 0).toLocaleString()}</Text>
+                    <View key={type} style={styles.chartRow}>
+                      <Text style={styles.chartEmoji}>{meta.emoji}</Text>
+                      <View style={styles.chartBarWrap}>
+                        <AnimatedProgressBar pct={pct} color={meta.color} height={6} delay={i * 80 + 200} />
+                      </View>
+                      <Text style={[styles.chartVal, { color: meta.color }]}>{fmt(val)}</Text>
                     </View>
                   );
                 })}
@@ -251,7 +266,7 @@ export default function RevenueScreen() {
             </View>
           )}
 
-          {/* Entries list */}
+          {/* ── Entries list ── */}
           <Text style={styles.sectionTitle}>Recent Entries</Text>
           {entries.length === 0 ? (
             <View style={styles.emptyState}>
@@ -267,16 +282,21 @@ export default function RevenueScreen() {
                   <TouchableOpacity
                     style={styles.entryCard}
                     onPress={() => openEdit(entry)}
+                    onLongPress={() => deleteEntry(entry.id)}
+                    delayLongPress={450}
                     activeOpacity={0.8}
                   >
                     <View style={[styles.entryIcon, { backgroundColor: `${meta.color}15` }]}>
                       <Text style={styles.entryEmoji}>{meta.emoji}</Text>
                     </View>
                     <View style={styles.entryInfo}>
-                      <Text style={styles.entryName}>{entry.client_name ?? meta.label}</Text>
-                      <Text style={styles.entrySub}>{meta.label} · {formatDate(entry.date)}</Text>
+                      <Text style={styles.entryName}>{entry.client_name || meta.label}</Text>
+                      <Text style={styles.entrySub}>{meta.label} · {fmtDate(entry.date)}</Text>
+                      {entry.notes ? (
+                        <Text style={styles.entryNotes} numberOfLines={1}>{entry.notes}</Text>
+                      ) : null}
                     </View>
-                    <Text style={styles.entryAmount}>+${entry.amount.toLocaleString()}</Text>
+                    <Text style={styles.entryAmount}>+{fmt(entry.amount)}</Text>
                   </TouchableOpacity>
                 </AnimatedCard>
               );
@@ -285,10 +305,10 @@ export default function RevenueScreen() {
         </ScrollView>
       )}
 
-      {/* Add / Edit Modal */}
+      {/* ── Add / Edit Modal ── */}
       <Modal visible={showAdd} transparent animationType="slide" onRequestClose={() => setShowAdd(false)}>
-        <KeyboardAvoidingView style={styles.modalOverlay} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-          <TouchableOpacity style={styles.modalBg} onPress={() => setShowAdd(false)} />
+        <KeyboardAvoidingView style={styles.modalOverlay} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+          <TouchableOpacity style={styles.modalBg} onPress={() => setShowAdd(false)} activeOpacity={1} />
           <View style={styles.modalSheet}>
             <View style={styles.modalHandle} />
             <View style={styles.modalHeader}>
@@ -359,7 +379,7 @@ export default function RevenueScreen() {
                     style={styles.modalInput}
                     value={form.date}
                     onChangeText={(v) => setForm((p) => ({ ...p, date: v }))}
-                    placeholder="2026-05-10"
+                    placeholder={new Date().toISOString().split('T')[0]}
                     placeholderTextColor="#333"
                   />
                 </View>
@@ -397,51 +417,50 @@ export default function RevenueScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.black },
-  centered: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  centered: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 32 },
   header: { paddingHorizontal: 22, paddingTop: 16, paddingBottom: 12, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end' },
   title: { fontSize: 22, fontWeight: '800', color: colors.white, letterSpacing: -0.5 },
   subtitle: { fontSize: 12, color: '#444', marginTop: 3 },
   addBtn: { backgroundColor: colors.white, borderRadius: 10, paddingVertical: 8, paddingHorizontal: 16 },
   addBtnText: { fontSize: 13, fontWeight: '700', color: colors.black },
   listContent: { paddingHorizontal: 22, paddingBottom: 100, gap: 14 },
-  heroCard: {
-    backgroundColor: '#0f0f0f', borderWidth: 1, borderColor: '#1e1e1e',
-    borderRadius: 20, padding: 24,
-  },
+
+  heroCard: { backgroundColor: '#0f0f0f', borderWidth: 1, borderColor: '#1e1e1e', borderRadius: 20, padding: 24 },
   heroLabel: { fontSize: 11, color: '#444', fontWeight: '700', textTransform: 'uppercase', letterSpacing: 1.5, marginBottom: 6 },
   heroAmount: { fontSize: 44, fontWeight: '900', color: colors.white, letterSpacing: -2 },
-  heroSub: { fontSize: 12, color: '#444', marginTop: 4 },
-  goalBarWrap: { marginTop: 16 },
-  goalTrack: { height: 5, backgroundColor: '#1a1a1a', borderRadius: 3, overflow: 'hidden' },
-  goalFill: { height: '100%', borderRadius: 3, backgroundColor: colors.revenue },
-  goalLabels: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 6 },
-  goalLabel: { fontSize: 11, color: '#444' },
+  heroSub: { fontSize: 12, color: '#444', marginTop: 4, marginBottom: 14 },
+  heroBarWrap: { marginBottom: 8 },
+  heroMeta: { flexDirection: 'row', justifyContent: 'space-between' },
+  heroMetaText: { fontSize: 11, color: '#444', fontWeight: '600' },
+
   statsRow: { flexDirection: 'row', gap: 8 },
   statCard: { flex: 1, backgroundColor: '#111', borderWidth: 1, borderColor: '#1a1a1a', borderRadius: 14, padding: 14 },
-  statVal: { fontSize: 18, fontWeight: '800', color: colors.white },
+  statVal: { fontSize: 16, fontWeight: '800', color: colors.white },
   statLbl: { fontSize: 10, color: '#444', fontWeight: '600', textTransform: 'uppercase', letterSpacing: 1, marginTop: 3 },
-  chartCard: { backgroundColor: '#111', borderWidth: 1, borderColor: '#1a1a1a', borderRadius: 16, padding: 18 },
-  chartLabel: { fontSize: 11, color: '#444', fontWeight: '700', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 16 },
-  bars: { flexDirection: 'row', alignItems: 'flex-end', height: 80, gap: 8 },
-  barWrap: { flex: 1, alignItems: 'center', gap: 6 },
-  bar: { width: '100%', borderRadius: 4, minHeight: 0 },
-  barLbl: { fontSize: 13 },
-  legend: { marginTop: 14, gap: 6 },
-  legendItem: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  legendDot: { width: 8, height: 8, borderRadius: 4 },
-  legendText: { fontSize: 12, color: '#666' },
+
+  chartCard: { backgroundColor: '#111', borderWidth: 1, borderColor: '#1a1a1a', borderRadius: 16, padding: 18, gap: 14 },
+  chartTitle: { fontSize: 11, color: '#444', fontWeight: '700', textTransform: 'uppercase', letterSpacing: 1 },
+  chartRows: { gap: 12 },
+  chartRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  chartEmoji: { fontSize: 14, width: 20, textAlign: 'center' },
+  chartBarWrap: { flex: 1 },
+  chartVal: { fontSize: 12, fontWeight: '700', width: 68, textAlign: 'right' },
+
   sectionTitle: { fontSize: 11, fontWeight: '700', color: '#444', textTransform: 'uppercase', letterSpacing: 1.5 },
   emptyState: { alignItems: 'center', paddingTop: 40, gap: 10 },
   emptyIcon: { fontSize: 40 },
   emptyTitle: { fontSize: 18, fontWeight: '800', color: colors.white },
   emptySub: { fontSize: 13, color: colors.grey600, textAlign: 'center' },
+
   entryCard: { backgroundColor: '#111', borderWidth: 1, borderColor: '#1a1a1a', borderRadius: 14, padding: 14, flexDirection: 'row', alignItems: 'center', gap: 12 },
   entryIcon: { width: 40, height: 40, borderRadius: 12, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
   entryEmoji: { fontSize: 16 },
   entryInfo: { flex: 1 },
   entryName: { fontSize: 14, fontWeight: '600', color: colors.white },
   entrySub: { fontSize: 11, color: '#555', marginTop: 2 },
+  entryNotes: { fontSize: 11, color: '#3a3a3a', marginTop: 2, fontStyle: 'italic' },
   entryAmount: { fontSize: 15, fontWeight: '800', color: colors.revenue },
+
   modalOverlay: { flex: 1, justifyContent: 'flex-end' },
   modalBg: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.6)' },
   modalSheet: { backgroundColor: '#111', borderTopLeftRadius: 28, borderTopRightRadius: 28, padding: 24, paddingBottom: 40, gap: 14 },
