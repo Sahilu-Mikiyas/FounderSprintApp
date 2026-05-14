@@ -109,6 +109,8 @@ export default function SettingsScreen() {
             await supabase.from('sprints').update({ status: 'completed' }).eq('id', sprint.id);
             await supabase.from('profiles').update({ onboarding_complete: false }).eq('id', user!.id);
             setResettingSprint(false);
+            // Clear sprint store so Today screen doesn't show stale data
+            useSprintStore.setState({ sprint: null, today: null, sprintDays: [], routine: [], completions: [], pausesThisWeek: 0 });
             router.replace('/onboarding/mode');
           },
         },
@@ -126,13 +128,27 @@ export default function SettingsScreen() {
   async function handleDeleteAccount() {
     Alert.alert(
       'Delete Account?',
-      'This permanently deletes all your data. This cannot be undone.',
+      'This permanently deletes all your data and signs you out. This cannot be undone.',
       [
         { text: 'Cancel', style: 'cancel' },
         {
           text: 'Delete Everything', style: 'destructive', onPress: async () => {
+            if (!user) return;
             await cancelAllNotifications();
-            await supabase.auth.admin.deleteUser(user!.id).catch(() => {});
+            // Delete all user data — FK cascades handle child rows
+            await Promise.all([
+              supabase.from('revenue_entries').delete().eq('user_id', user.id),
+              supabase.from('goal_milestones').delete().eq('user_id', user.id),
+              supabase.from('goals').delete().eq('user_id', user.id),
+              supabase.from('kpis').delete().eq('user_id', user.id),
+              supabase.from('leads').delete().eq('user_id', user.id),
+              supabase.from('pause_log').delete().eq('user_id', user.id),
+              supabase.from('routine_completions').delete().eq('user_id', user.id),
+              supabase.from('routine_items').delete().eq('user_id', user.id),
+              supabase.from('sprint_days').delete().eq('user_id', user.id),
+              supabase.from('sprints').delete().eq('user_id', user.id),
+              supabase.from('profiles').delete().eq('id', user.id),
+            ]);
             await signOut();
           },
         },
@@ -196,13 +212,21 @@ export default function SettingsScreen() {
         {/* Sprint */}
         <Section title="Sprint">
           <SettingRow
-            label="Current Sprint"
+            label="Status"
             value={sprint ? `${sprint.duration_days}-day sprint` : 'None active'}
             valueColor={sprint ? colors.revenue : '#444'}
           />
           <SettingRow
             label="Mode"
             value={sprint?.mode ? sprint.mode.charAt(0).toUpperCase() + sprint.mode.slice(1) : '—'}
+          />
+          <SettingRow
+            label="Start Date"
+            value={sprint ? new Date(sprint.start_date + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—'}
+          />
+          <SettingRow
+            label="End Date"
+            value={sprint ? new Date(sprint.end_date + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—'}
           />
           <SettingRow
             label="Revenue Goal"
