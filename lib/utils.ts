@@ -2,16 +2,20 @@ import { colors } from './colors';
 
 export function getDayTypeStyle(dayType: string): { label: string; color: string; emoji: string } {
   switch (dayType) {
+    case 'deep_work':
+      return { label: 'Deep Work', color: colors.development, emoji: '🎯' };
+    case 'outreach':
+      return { label: 'Outreach & Sales', color: colors.clients, emoji: '📨' };
+    case 'content':
+      return { label: 'Content Creation', color: colors.content, emoji: '🎬' };
+    case 'review':
+      return { label: 'Review & Planning', color: colors.review, emoji: '📊' };
+    case 'learning':
+      return { label: 'Learning', color: colors.learning, emoji: '📚' };
+    case 'admin':
+      return { label: 'Admin & Ops', color: colors.grey400, emoji: '🗂️' };
     case 'fyp':
       return { label: 'FYP Day', color: colors.fyp, emoji: '🎓' };
-    case 'review':
-      return { label: 'Review Day', color: colors.review, emoji: '🔄' };
-    case 'deep_work':
-      return { label: 'Deep Work', color: colors.development, emoji: '🛠' };
-    case 'outreach':
-      return { label: 'Outreach Day', color: colors.clients, emoji: '📣' };
-    case 'content':
-      return { label: 'Content Day', color: colors.content, emoji: '✍️' };
     default:
       return { label: 'Work Day', color: colors.grey600, emoji: '💼' };
   }

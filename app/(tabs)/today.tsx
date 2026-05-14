@@ -28,6 +28,8 @@ export default function TodayScreen() {
     if (user) fetchToday(user.id);
   }, [user]);
 
+  const firstName = user?.user_metadata?.full_name?.split(' ')[0] ?? 'Founder';
+
   if (loading) {
     return (
       <View style={styles.centered}>
@@ -40,7 +42,7 @@ export default function TodayScreen() {
     return (
       <View style={styles.centered}>
         <Text style={styles.emptyTitle}>No active sprint</Text>
-        <Text style={styles.emptySub}>Start your sprint to begin tracking</Text>
+        <Text style={styles.emptySub}>Complete onboarding to start tracking</Text>
         <TouchableOpacity style={styles.startBtn} onPress={() => router.push('/onboarding/mode')}>
           <Text style={styles.startBtnText}>Start Sprint</Text>
         </TouchableOpacity>
@@ -57,10 +59,10 @@ export default function TodayScreen() {
   const completedCount = completions.length;
   const totalRoutine = routine.length;
 
-  async function handlePause() {
+  function handlePause() {
     Alert.alert(
       'Pause Today?',
-      'You get 1 pause per week. This day will be skipped and your sprint shifts by 1 day.',
+      'You get 1 pause per week. This day is skipped and your sprint end date shifts by 1 day.',
       [
         { text: 'Cancel', style: 'cancel' },
         { text: 'Pause', style: 'destructive', onPress: () => user && pauseDay(user.id) },
@@ -68,10 +70,10 @@ export default function TodayScreen() {
     );
   }
 
-  async function handleMarkDone() {
+  function handleMarkDone() {
     Alert.alert(
       'Mark Day Complete?',
-      'Nice work! This will mark today as done.',
+      'Great work! Lock in today as done.',
       [
         { text: 'Not yet', style: 'cancel' },
         { text: 'Done! ✓', onPress: () => user && markDayDone(user.id) },
@@ -83,53 +85,55 @@ export default function TodayScreen() {
     <SafeAreaView style={styles.container}>
       <ScrollView
         showsVerticalScrollIndicator={false}
+        contentContainerStyle={styles.scroll}
         refreshControl={<RefreshControl refreshing={loading} onRefresh={onRefresh} tintColor={colors.white} />}
       >
-        {/* Header */}
-        <View style={styles.header}>
+        {/* ── Header row: greeting + settings ── */}
+        <View style={styles.headerRow}>
           <View>
-            <Text style={styles.greeting}>{formatGreeting()} 👋</Text>
+            <Text style={styles.greeting}>{formatGreeting()}, {firstName} 👋</Text>
             <Text style={styles.dateStr}>{formatDate(new Date())}</Text>
           </View>
-          <TouchableOpacity
-            style={styles.settingsBtn}
-            onPress={() => router.push('/settings')}
-          >
+          <TouchableOpacity style={styles.settingsBtn} onPress={() => router.push('/settings')}>
             <Text style={styles.settingsBtnText}>⚙️</Text>
           </TouchableOpacity>
+        </View>
 
-          {/* Sprint progress bar */}
-          <View style={styles.sprintBar}>
-            <View>
-              <Text style={styles.sprintDayLabel}>Sprint Day</Text>
-              <Text style={styles.sprintDayNum}>{dayNum}</Text>
-            </View>
-            <View style={styles.progTrack}>
-              <AnimatedProgressBar pct={progress} color={colors.white} height={3} delay={300} />
-            </View>
-            <Text style={styles.progPct}>{progress}%</Text>
+        {/* ── Sprint progress bar ── */}
+        <View style={styles.sprintBar}>
+          <View>
+            <Text style={styles.sprintDayLabel}>Sprint Day</Text>
+            <Text style={styles.sprintDayNum}>{dayNum} <Text style={styles.sprintOf}>/ {sprint.duration_days}</Text></Text>
           </View>
+          <View style={styles.progTrack}>
+            <AnimatedProgressBar pct={progress} color={colors.white} height={3} delay={300} />
+          </View>
+          <Text style={styles.progPct}>{progress}%</Text>
         </View>
 
         <View style={styles.body}>
-          {/* Day badge */}
+          {/* ── Day type badge ── */}
           <View style={[styles.dayBadge, { backgroundColor: `${dayStyle.color}18` }]}>
             <Text style={styles.dayBadgeEmoji}>{dayStyle.emoji}</Text>
             <Text style={[styles.dayBadgeText, { color: dayStyle.color }]}>{dayStyle.label}</Text>
-            {isDone && <Text style={styles.doneBadge}>✓ Done</Text>}
-            {isPaused && <Text style={[styles.doneBadge, { color: colors.learning }]}>⏸ Paused</Text>}
+            {isDone && <Text style={[styles.statusBadge, { color: colors.revenue }]}>✓ Done</Text>}
+            {isPaused && <Text style={[styles.statusBadge, { color: colors.learning }]}>⏸ Paused</Text>}
           </View>
 
-          {/* Task card */}
+          {/* ── Today's focus task ── */}
           <AnimatedCard delay={100}>
-            <Text style={styles.sectionTitle}>Deep Work Task</Text>
+            <Text style={styles.sectionTitle}>{dayStyle.label} Task</Text>
             <View style={styles.card}>
               <Text style={styles.cardLabel}>Today's Focus</Text>
-              <Text style={styles.cardText}>
-                {today?.task_title ?? 'No task set — tap to add one'}
-              </Text>
-              {today?.task_notes && (
-                <Text style={styles.cardNotes}>{today.task_notes}</Text>
+              {today?.task_title ? (
+                <>
+                  <Text style={styles.cardText}>{today.task_title}</Text>
+                  {today.task_notes ? (
+                    <Text style={styles.cardNotes}>{today.task_notes}</Text>
+                  ) : null}
+                </>
+              ) : (
+                <Text style={styles.cardEmpty}>No task set — go to the Sprint tab to add one</Text>
               )}
               <View style={[styles.cardTag, { backgroundColor: `${dayStyle.color}15` }]}>
                 <Text style={[styles.cardTagText, { color: dayStyle.color }]}>
@@ -139,36 +143,40 @@ export default function TodayScreen() {
             </View>
           </AnimatedCard>
 
-          {/* Routine checklist */}
+          {/* ── Daily routine checklist ── */}
           <AnimatedCard delay={200}>
             <View style={styles.sectionRow}>
               <Text style={styles.sectionTitle}>Daily Routine</Text>
               <Text style={styles.sectionCount}>{completedCount}/{totalRoutine}</Text>
             </View>
             <View style={styles.card}>
-              {routine.map((item, i) => {
-                const done = completions.includes(item.id);
-                return (
-                  <TouchableOpacity
-                    key={item.id}
-                    style={[styles.routineRow, i === routine.length - 1 && { borderBottomWidth: 0 }]}
-                    onPress={() => user && toggleRoutine(item.id, user.id)}
-                    activeOpacity={0.7}
-                  >
-                    <View style={[styles.rcheck, done && styles.rcheckOn]}>
-                      {done && <Text style={styles.rcheckMark}>✓</Text>}
-                    </View>
-                    <Text style={[styles.rtext, done && styles.rtextDone]}>{item.title}</Text>
-                    {item.duration_minutes && (
-                      <Text style={styles.rtime}>{item.duration_minutes}m</Text>
-                    )}
-                  </TouchableOpacity>
-                );
-              })}
+              {routine.length === 0 ? (
+                <Text style={styles.cardEmpty}>No routine items yet</Text>
+              ) : (
+                routine.map((item, i) => {
+                  const done = completions.includes(item.id);
+                  return (
+                    <TouchableOpacity
+                      key={item.id}
+                      style={[styles.routineRow, i === routine.length - 1 && { borderBottomWidth: 0 }]}
+                      onPress={() => user && toggleRoutine(item.id, user.id)}
+                      activeOpacity={0.7}
+                    >
+                      <View style={[styles.rcheck, done && styles.rcheckOn]}>
+                        {done && <Text style={styles.rcheckMark}>✓</Text>}
+                      </View>
+                      <Text style={[styles.rtext, done && styles.rtextDone]}>{item.title}</Text>
+                      {item.duration_minutes ? (
+                        <Text style={styles.rtime}>{item.duration_minutes}m</Text>
+                      ) : null}
+                    </TouchableOpacity>
+                  );
+                })
+              )}
             </View>
           </AnimatedCard>
 
-          {/* Pause row */}
+          {/* ── Pause row ── */}
           <TouchableOpacity
             style={[styles.pauseRow, !canPause && styles.pauseRowDisabled]}
             onPress={canPause ? handlePause : undefined}
@@ -177,10 +185,10 @@ export default function TodayScreen() {
             <View style={styles.pauseIcon}><Text style={{ fontSize: 18 }}>⏸</Text></View>
             <View style={{ flex: 1 }}>
               <Text style={styles.pauseTitle}>
-                {isPaused ? 'Day Paused' : canPause ? 'Pause Today' : 'No Pauses Left'}
+                {isPaused ? 'Day Paused' : canPause ? 'Pause Today' : 'No Pauses Left This Week'}
               </Text>
               <Text style={styles.pauseSub}>
-                {pausesThisWeek}/1 pause used this week
+                {pausesThisWeek}/1 pause used this week · sprint extends by 1 day
               </Text>
             </View>
             <View style={styles.pauseBadge}>
@@ -188,7 +196,7 @@ export default function TodayScreen() {
             </View>
           </TouchableOpacity>
 
-          {/* Quick actions */}
+          {/* ── Quick actions ── */}
           <View style={styles.quickRow}>
             <TouchableOpacity
               style={styles.quickBtn}
@@ -208,11 +216,17 @@ export default function TodayScreen() {
             </TouchableOpacity>
           </View>
 
-          {/* Mark done */}
+          {/* ── Mark day complete ── */}
           {!isDone && !isPaused && (
             <TouchableOpacity style={styles.doneBtn} onPress={handleMarkDone} activeOpacity={0.85}>
               <Text style={styles.doneBtnText}>Mark Day Complete ✓</Text>
             </TouchableOpacity>
+          )}
+
+          {isDone && (
+            <View style={styles.completedBanner}>
+              <Text style={styles.completedBannerText}>🎉 Day complete — great work!</Text>
+            </View>
           )}
         </View>
       </ScrollView>
@@ -222,37 +236,46 @@ export default function TodayScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.black },
+  scroll: { paddingBottom: 32 },
   centered: { flex: 1, backgroundColor: colors.black, alignItems: 'center', justifyContent: 'center', padding: 32 },
   emptyTitle: { fontSize: 22, fontWeight: '800', color: colors.white, letterSpacing: -0.5 },
   emptySub: { fontSize: 14, color: colors.grey600, marginTop: 8, textAlign: 'center' },
   startBtn: { marginTop: 24, height: 50, backgroundColor: colors.white, borderRadius: 14, paddingHorizontal: 32, alignItems: 'center', justifyContent: 'center' },
   startBtnText: { fontSize: 15, fontWeight: '700', color: colors.black },
 
-  header: { paddingHorizontal: 22, paddingTop: 16, paddingBottom: 12, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' },
+  headerRow: {
+    paddingHorizontal: 22, paddingTop: 16, paddingBottom: 0,
+    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start',
+  },
   greeting: { fontSize: 13, color: colors.grey600, fontWeight: '500' },
   dateStr: { fontSize: 22, fontWeight: '800', color: colors.white, letterSpacing: -0.5, marginTop: 2 },
-  settingsBtn: { width: 38, height: 38, backgroundColor: '#111', borderWidth: 1, borderColor: '#1a1a1a', borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
+  settingsBtn: {
+    width: 38, height: 38, backgroundColor: '#111', borderWidth: 1,
+    borderColor: '#1a1a1a', borderRadius: 12, alignItems: 'center', justifyContent: 'center',
+  },
   settingsBtnText: { fontSize: 16 },
+
   sprintBar: {
-    marginTop: 14, backgroundColor: '#111', borderWidth: 1, borderColor: '#1a1a1a',
-    borderRadius: 14, padding: 14, flexDirection: 'row', alignItems: 'center', gap: 12,
+    marginHorizontal: 22, marginTop: 14,
+    backgroundColor: '#111', borderWidth: 1, borderColor: '#1a1a1a',
+    borderRadius: 14, padding: 14,
+    flexDirection: 'row', alignItems: 'center', gap: 12,
   },
   sprintDayLabel: { fontSize: 10, color: '#444', fontWeight: '700', textTransform: 'uppercase', letterSpacing: 1 },
   sprintDayNum: { fontSize: 22, fontWeight: '900', color: colors.white },
+  sprintOf: { fontSize: 14, fontWeight: '500', color: '#333' },
   progTrack: { flex: 1, height: 3, backgroundColor: '#1e1e1e', borderRadius: 2, overflow: 'hidden' },
-  progFill: { height: '100%', borderRadius: 2, backgroundColor: colors.white },
   progPct: { fontSize: 11, color: '#444', fontWeight: '600' },
 
-  body: { paddingHorizontal: 22, paddingBottom: 24, gap: 16 },
+  body: { paddingHorizontal: 22, paddingTop: 16, gap: 16 },
 
   dayBadge: {
     flexDirection: 'row', alignItems: 'center', gap: 8,
-    alignSelf: 'flex-start', paddingVertical: 8, paddingHorizontal: 14,
-    borderRadius: 100,
+    alignSelf: 'flex-start', paddingVertical: 8, paddingHorizontal: 14, borderRadius: 100,
   },
   dayBadgeEmoji: { fontSize: 14 },
   dayBadgeText: { fontSize: 13, fontWeight: '700' },
-  doneBadge: { fontSize: 12, fontWeight: '700', color: colors.revenue, marginLeft: 4 },
+  statusBadge: { fontSize: 12, fontWeight: '700', marginLeft: 4 },
 
   sectionTitle: { fontSize: 11, fontWeight: '700', color: '#444', textTransform: 'uppercase', letterSpacing: 1.5, marginBottom: 8 },
   sectionRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
@@ -262,6 +285,7 @@ const styles = StyleSheet.create({
   cardLabel: { fontSize: 10, color: '#444', fontWeight: '700', textTransform: 'uppercase', letterSpacing: 1.5, marginBottom: 8 },
   cardText: { fontSize: 15, fontWeight: '600', color: colors.white, lineHeight: 22 },
   cardNotes: { fontSize: 13, color: colors.grey600, marginTop: 6, lineHeight: 20 },
+  cardEmpty: { fontSize: 14, color: '#333', fontStyle: 'italic' },
   cardTag: { alignSelf: 'flex-start', marginTop: 12, paddingVertical: 4, paddingHorizontal: 10, borderRadius: 8 },
   cardTagText: { fontSize: 11, fontWeight: '700' },
 
@@ -284,10 +308,10 @@ const styles = StyleSheet.create({
     backgroundColor: '#0d0d0d', borderWidth: 1, borderColor: '#1a1a1a',
     borderRadius: 14, padding: 14, flexDirection: 'row', alignItems: 'center', gap: 12,
   },
-  pauseRowDisabled: { opacity: 0.4 },
+  pauseRowDisabled: { opacity: 0.35 },
   pauseIcon: { width: 38, height: 38, backgroundColor: '#161616', borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
   pauseTitle: { fontSize: 14, fontWeight: '600', color: '#888' },
-  pauseSub: { fontSize: 11, color: '#333', marginTop: 2 },
+  pauseSub: { fontSize: 11, color: '#333', marginTop: 2, lineHeight: 16 },
   pauseBadge: { paddingVertical: 5, paddingHorizontal: 10, backgroundColor: '#161616', borderRadius: 20 },
   pauseBadgeText: { fontSize: 11, color: '#555', fontWeight: '600' },
 
@@ -304,4 +328,11 @@ const styles = StyleSheet.create({
     borderRadius: 14, alignItems: 'center', justifyContent: 'center',
   },
   doneBtnText: { fontSize: 14, fontWeight: '700', color: colors.revenue },
+
+  completedBanner: {
+    height: 50, backgroundColor: `${colors.revenue}12`, borderWidth: 1,
+    borderColor: `${colors.revenue}30`, borderRadius: 14,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  completedBannerText: { fontSize: 14, fontWeight: '700', color: colors.revenue },
 });
