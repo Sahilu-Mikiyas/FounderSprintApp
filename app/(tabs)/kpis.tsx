@@ -34,13 +34,13 @@ const CAT_COLORS: Record<Category, string> = {
   habit: colors.habit,
 };
 
-const CAT_LABELS: Record<Category, string> = {
-  revenue: 'Revenue',
-  clients: 'Clients',
-  content: 'Content',
-  development: 'Development',
-  learning: 'Learning',
-  habit: 'Habit',
+const CAT_META: Record<Category, { label: string; emoji: string }> = {
+  revenue:     { label: 'Revenue',     emoji: '💰' },
+  clients:     { label: 'Clients',     emoji: '🤝' },
+  content:     { label: 'Content',     emoji: '🎬' },
+  development: { label: 'Development', emoji: '🛠' },
+  learning:    { label: 'Learning',    emoji: '📚' },
+  habit:       { label: 'Habit',       emoji: '🔁' },
 };
 
 function getScoreColor(pct: number) {
@@ -136,6 +136,29 @@ export default function KpisScreen() {
 
   const weekTabs = Array.from({ length: Math.min(totalWeeks, 26) }, (_, i) => i + 1);
 
+  const scoreCounts = kpis.reduce(
+    (acc, kpi) => {
+      const pct = kpi.target > 0 ? Math.min(Math.round((kpi.current_value / kpi.target) * 100), 100) : 0;
+      if (pct >= 80) acc.green++;
+      else if (pct >= 50) acc.yellow++;
+      else acc.red++;
+      return acc;
+    },
+    { green: 0, yellow: 0, red: 0 }
+  );
+
+  if (!sprint) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.centered}>
+          <Text style={styles.emptyIcon}>📊</Text>
+          <Text style={styles.emptyTitle}>No active sprint</Text>
+          <Text style={styles.emptySub}>Start a sprint to track your weekly KPIs</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
   return (
     <SafeAreaView style={styles.container}>
       {/* Header */}
@@ -194,9 +217,11 @@ export default function KpisScreen() {
                       <View style={styles.kpiTop}>
                         <View>
                           <View style={styles.kpiCat}>
-                            <View style={[styles.kpiDot, { backgroundColor: col }]} />
+                            <Text style={styles.kpiCatEmoji}>
+                              {CAT_META[kpi.category as Category]?.emoji ?? '📌'}
+                            </Text>
                             <Text style={[styles.kpiCatName, { color: col }]}>
-                              {CAT_LABELS[kpi.category as Category] ?? kpi.category}
+                              {CAT_META[kpi.category as Category]?.label ?? kpi.category}
                             </Text>
                           </View>
                           <Text style={styles.kpiName}>{kpi.name}</Text>
@@ -206,11 +231,11 @@ export default function KpisScreen() {
                       <AnimatedProgressBar pct={pct} color={col} height={4} delay={idx * 60 + 200} />
                       <View style={styles.kpiNums}>
                         <Text style={styles.kpiCurrent}>
-                          {kpi.unit}{kpi.current_value.toLocaleString()} {kpi.unit ? '' : 'current'}
+                          {kpi.unit ? `${kpi.unit}${kpi.current_value.toLocaleString()}` : kpi.current_value.toLocaleString()}
+                          {' / '}
+                          {kpi.unit ? `${kpi.unit}${kpi.target.toLocaleString()}` : kpi.target.toLocaleString()}
                         </Text>
-                        <Text style={styles.kpiGoal}>
-                          Goal: {kpi.unit}{kpi.target.toLocaleString()}
-                        </Text>
+                        <Text style={styles.kpiGoalLabel}>target</Text>
                       </View>
                     </TouchableOpacity>
                   </AnimatedCard>
@@ -219,16 +244,35 @@ export default function KpisScreen() {
 
               {/* Scoreboard */}
               <Text style={[styles.sectionTitle, { marginTop: 8 }]}>Weekly Scoreboard</Text>
+              {/* Summary counts */}
+              <View style={styles.scoreCountRow}>
+                <View style={styles.scoreCount}>
+                  <Text style={styles.scoreCountNum}>{scoreCounts.green}</Text>
+                  <Text style={styles.scoreCountLabel}>🟢 On track</Text>
+                </View>
+                <View style={styles.scoreCountDivider} />
+                <View style={styles.scoreCount}>
+                  <Text style={styles.scoreCountNum}>{scoreCounts.yellow}</Text>
+                  <Text style={styles.scoreCountLabel}>🟡 Progressing</Text>
+                </View>
+                <View style={styles.scoreCountDivider} />
+                <View style={styles.scoreCount}>
+                  <Text style={styles.scoreCountNum}>{scoreCounts.red}</Text>
+                  <Text style={styles.scoreCountLabel}>🔴 Behind</Text>
+                </View>
+              </View>
+              {/* Per-KPI rows */}
               <View style={styles.scoreboard}>
-                {kpis.map((kpi) => {
+                {kpis.map((kpi, i) => {
                   const pct = kpi.target > 0 ? Math.min(Math.round((kpi.current_value / kpi.target) * 100), 100) : 0;
                   const col = CAT_COLORS[kpi.category as Category] ?? colors.grey600;
                   const score = getScoreColor(pct);
+                  const isLast = i === kpis.length - 1;
                   return (
-                    <View key={kpi.id} style={styles.scoreRow}>
+                    <View key={kpi.id} style={[styles.scoreRow, isLast && { borderBottomWidth: 0 }]}>
                       <View style={styles.scoreCat}>
                         <View style={[styles.scoreDot, { backgroundColor: col }]} />
-                        <Text style={styles.scoreName}>{kpi.name}</Text>
+                        <Text style={styles.scoreName} numberOfLines={1}>{kpi.name}</Text>
                       </View>
                       <View style={[styles.scoreBadge, { backgroundColor: score.bg }]}>
                         <Text style={[styles.scoreBadgeText, { color: score.text }]}>
@@ -275,7 +319,7 @@ export default function KpisScreen() {
                       onPress={() => setNewKpi((p) => ({ ...p, category: cat }))}
                     >
                       <Text style={[styles.catChipText, active && { color: col }]}>
-                        {CAT_LABELS[cat]}
+                        {CAT_META[cat].emoji} {CAT_META[cat].label}
                       </Text>
                     </TouchableOpacity>
                   );
@@ -376,7 +420,8 @@ const styles = StyleSheet.create({
   emptySub: { fontSize: 13, color: colors.grey600, textAlign: 'center' },
   kpiCard: { backgroundColor: '#111', borderWidth: 1, borderColor: '#1a1a1a', borderRadius: 16, padding: 16 },
   kpiTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 },
-  kpiCat: { flexDirection: 'row', alignItems: 'center', gap: 7, marginBottom: 4 },
+  kpiCat: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 4 },
+  kpiCatEmoji: { fontSize: 12 },
   kpiDot: { width: 8, height: 8, borderRadius: 4 },
   kpiCatName: { fontSize: 10, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 1 },
   kpiName: { fontSize: 14, fontWeight: '700', color: colors.white },
@@ -384,9 +429,17 @@ const styles = StyleSheet.create({
   kpiTrack: { height: 4, backgroundColor: '#1a1a1a', borderRadius: 2, overflow: 'hidden', marginBottom: 10 },
   kpiFill: { height: '100%', borderRadius: 2 },
   kpiBarWrap: { marginBottom: 10 },
-  kpiNums: { flexDirection: 'row', justifyContent: 'space-between' },
-  kpiCurrent: { fontSize: 11, color: '#555' },
-  kpiGoal: { fontSize: 11, color: '#333' },
+  kpiNums: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  kpiCurrent: { fontSize: 12, color: colors.grey600, fontWeight: '600' },
+  kpiGoalLabel: { fontSize: 10, color: '#333', fontWeight: '600' },
+  scoreCountRow: {
+    flexDirection: 'row', backgroundColor: '#111', borderWidth: 1,
+    borderColor: '#1a1a1a', borderRadius: 14, padding: 16,
+  },
+  scoreCount: { flex: 1, alignItems: 'center', gap: 4 },
+  scoreCountNum: { fontSize: 22, fontWeight: '900', color: colors.white },
+  scoreCountLabel: { fontSize: 11, color: '#444', fontWeight: '600' },
+  scoreCountDivider: { width: 1, backgroundColor: '#1e1e1e', marginVertical: 4 },
   scoreboard: { backgroundColor: '#111', borderWidth: 1, borderColor: '#1a1a1a', borderRadius: 16, padding: 16, gap: 2 },
   scoreRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 9, borderBottomWidth: 1, borderBottomColor: '#151515' },
   scoreCat: { flexDirection: 'row', alignItems: 'center', gap: 8, flex: 1 },
