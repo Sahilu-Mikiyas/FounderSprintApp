@@ -29,6 +29,14 @@ export default function GoalScreen() {
 
     const fmt = (d: Date) => d.toISOString().split('T')[0];
 
+    // Ensure profile row exists before creating sprint (FK dependency)
+    await supabase.from('profiles').upsert({
+      id: user.id,
+      email: user.email ?? '',
+      full_name: user.user_metadata?.full_name ?? '',
+      onboarding_complete: false,
+    }, { onConflict: 'id', ignoreDuplicates: true });
+
     // Create sprint
     const { data: sprint, error } = await supabase
       .from('sprints')
@@ -86,18 +94,8 @@ export default function GoalScreen() {
       await supabase.from('routine_items').insert(routine);
     }
 
-    // Mark onboarding complete — upsert to be safe
-    const { error: profileErr } = await supabase
-      .from('profiles')
-      .upsert({ id: user.id, onboarding_complete: true });
-
-    if (profileErr) {
-      // Try update as fallback
-      await supabase
-        .from('profiles')
-        .update({ onboarding_complete: true })
-        .eq('id', user.id);
-    }
+    // Mark onboarding complete
+    await supabase.from('profiles').update({ onboarding_complete: true }).eq('id', user.id);
 
     reset();
     setLoading(false);
