@@ -18,7 +18,7 @@ export default function SignUpScreen() {
       return;
     }
     setLoading(true);
-    const { error } = await supabase.auth.signUp({
+    const { data, error } = await supabase.auth.signUp({
       email,
       password,
       options: { data: { full_name: name } },
@@ -26,7 +26,11 @@ export default function SignUpScreen() {
     setLoading(false);
     if (error) {
       Alert.alert('Sign up failed', error.message);
+    } else if (data.session) {
+      // Email confirmation disabled — session returned immediately, go straight to onboarding
+      router.replace('/onboarding/mode');
     } else {
+      // Email confirmation enabled — ask user to check inbox
       Alert.alert('Check your email', 'We sent you a confirmation link.', [
         { text: 'OK', onPress: () => router.push('/(auth)/sign-in') },
       ]);
