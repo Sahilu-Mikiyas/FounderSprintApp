@@ -6,11 +6,10 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuthStore } from '../../store/authStore';
-import { useSprintStore, SprintDay } from '../../store/sprintStore';
+import { useSprintStore, SprintDay, SprintDayTask } from '../../store/sprintStore';
 import { colors } from '../../lib/colors';
 import { getDayTypeStyle, getDayNumber } from '../../lib/utils';
 
-// Filter chip definitions — id matches sprint_days.day_type
 const FILTERS: { label: string; id: string | null }[] = [
   { label: 'All', id: null },
   { label: '🎯 Deep Work', id: 'deep_work' },
@@ -19,6 +18,15 @@ const FILTERS: { label: string; id: string | null }[] = [
   { label: '📊 Review', id: 'review' },
   { label: '📚 Learning', id: 'learning' },
   { label: '🗂️ Admin', id: 'admin' },
+];
+
+const COLOR_TAGS = [
+  { key: 'green', color: '#22C55E' },
+  { key: 'blue', color: '#3B82F6' },
+  { key: 'yellow', color: '#EAB308' },
+  { key: 'red', color: '#EF4444' },
+  { key: 'purple', color: '#A855F7' },
+  { key: 'orange', color: '#F97316' },
 ];
 
 const PHASE_LABELS = ['Foundation', 'Build', 'Momentum'];
@@ -49,13 +57,16 @@ function modeLabel(mode: string) {
 
 export default function SprintScreen() {
   const { user } = useAuthStore();
-  const { sprint, sprintDays, loading, fetchToday, updateDayTask } = useSprintStore();
+  const {
+    sprint, sprintDays, loading, dayTasks,
+    fetchToday, fetchDayTasks, addDayTask, toggleDayTask, deleteDayTask,
+  } = useSprintStore();
 
   const [filter, setFilter] = useState<string | null>(null);
   const [editDay, setEditDay] = useState<SprintDay | null>(null);
-  const [taskInput, setTaskInput] = useState('');
-  const [notesInput, setNotesInput] = useState('');
-  const [saving, setSaving] = useState(false);
+  const [newTaskText, setNewTaskText] = useState('');
+  const [selectedColor, setSelectedColor] = useState<string>('');
+  const [addingTask, setAddingTask] = useState(false);
 
   const scrollRef = useRef<ScrollView>(null);
   const todayStr = new Date().toISOString().split('T')[0];
@@ -65,29 +76,39 @@ export default function SprintScreen() {
     if (user && !sprint) fetchToday(user.id);
   }, [user]);
 
-  // Scroll to today after layout
   function scrollToToday() {
     if (todayRowY.current > 0) {
       scrollRef.current?.scrollTo({ y: Math.max(0, todayRowY.current - 80), animated: true });
     }
   }
 
-  const filtered = sprintDays.filter((d) => filter === null || d.day_type === filter);
+  async function openSheet(day: SprintDay) {
+    setEditDay(day);
+    setNewTaskText('');
+    setSelectedColor('');
+    if (!dayTasks[day.id]) {
+      await fetchDayTasks(day.id);
+    }
+  }
 
+  async function handleAddTask() {
+    if (!editDay || !newTaskText.trim()) return;
+    setAddingTask(true);
+    await addDayTask(editDay.id, newTaskText.trim(), '', selectedColor);
+    setNewTaskText('');
+    setSelectedColor('');
+    setAddingTask(false);
+  }
+
+  const filtered = sprintDays.filter((d) => filter === null || d.day_type === filter);
   const totalDays = sprint?.duration_days ?? 60;
   const phaseGroups: SprintDay[][] = [[], [], []];
   filtered.forEach((d) => phaseGroups[getPhase(d.day_number, totalDays)].push(d));
-
   const dayNum = sprint ? getDayNumber(sprint.start_date) : 0;
   const progress = sprint ? Math.min(Math.round((dayNum / totalDays) * 100), 100) : 0;
 
-  async function saveTask() {
-    if (!editDay) return;
-    setSaving(true);
-    await updateDayTask(editDay.id, taskInput.trim(), notesInput.trim());
-    setSaving(false);
-    setEditDay(null);
-  }
+  const editTasks: SprintDayTask[] = editDay ? (dayTasks[editDay.id] ?? []) : [];
+  const doneCount = editTasks.filter((t) => t.is_done).length;
 
   if (loading && sprintDays.length === 0) {
     return <View style={styles.centered}><ActivityIndicator color={colors.white} size="large" /></View>;
@@ -104,7 +125,7 @@ export default function SprintScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
-      {/* ── Header ── */}
+      {/* Header */}
       <View style={styles.header}>
         <View style={{ flex: 1 }}>
           <Text style={styles.title}>{modeLabel(sprint.mode)}</Text>
@@ -116,7 +137,7 @@ export default function SprintScreen() {
         </View>
       </View>
 
-      {/* ── Filter chips ── */}
+      {/* Filter chips */}
       <ScrollView
         horizontal showsHorizontalScrollIndicator={false}
         style={styles.filterScroll}
@@ -136,7 +157,7 @@ export default function SprintScreen() {
         })}
       </ScrollView>
 
-      {/* ── Day list ── */}
+      {/* Day list */}
       <ScrollView
         ref={scrollRef}
         showsVerticalScrollIndicator={false}
@@ -165,46 +186,40 @@ export default function SprintScreen() {
                 const isDone = day.status === 'done';
                 const isPaused = day.status === 'paused';
                 const isFuture = day.date > todayStr;
+                const tasks = dayTasks[day.id] ?? [];
+                const taskDone = tasks.filter((t) => t.is_done).length;
+                const taskTotal = tasks.length;
 
                 return (
                   <TouchableOpacity
                     key={day.id}
                     style={[styles.dayRow, isToday && styles.dayRowToday]}
-                    onPress={() => {
-                      setEditDay(day);
-                      setTaskInput(day.task_title ?? '');
-                      setNotesInput(day.task_notes ?? '');
-                    }}
+                    onPress={() => openSheet(day)}
                     onLayout={(e) => {
                       if (isToday) todayRowY.current = e.nativeEvent.layout.y;
                     }}
                     activeOpacity={0.75}
                   >
-                    {/* Day number */}
                     <Text style={[styles.dayNum, (isDone || isFuture) && styles.dayNumFaded]}>
                       {day.day_number}
                     </Text>
-
-                    {/* Date */}
                     <Text style={styles.dayDate}>{fmtDate(day.date)}</Text>
-
-                    {/* Type pill */}
                     <View style={[styles.typePill, { backgroundColor: `${ds.color}15` }]}>
                       <Text style={[styles.typePillText, { color: ds.color }]} numberOfLines={1}>
                         {ds.emoji} {ds.label}
                       </Text>
                     </View>
-
-                    {/* Task preview */}
                     <View style={styles.taskPreview}>
-                      {day.task_title ? (
+                      {taskTotal > 0 ? (
+                        <Text style={styles.taskText} numberOfLines={1}>
+                          {taskDone}/{taskTotal} tasks
+                        </Text>
+                      ) : day.task_title ? (
                         <Text style={styles.taskText} numberOfLines={1}>{day.task_title}</Text>
                       ) : (
-                        <Text style={styles.taskEmpty}>+ Add task</Text>
+                        <Text style={styles.taskEmpty}>+ Add tasks</Text>
                       )}
                     </View>
-
-                    {/* Status */}
                     <View style={[
                       styles.statusDot,
                       isDone && styles.statusDotDone,
@@ -234,7 +249,7 @@ export default function SprintScreen() {
         )}
       </ScrollView>
 
-      {/* ── Edit task bottom sheet ── */}
+      {/* Task Manager Bottom Sheet */}
       <Modal
         visible={!!editDay}
         transparent
@@ -253,53 +268,105 @@ export default function SprintScreen() {
               const ds = getDayTypeStyle(editDay.day_type);
               return (
                 <>
-                  <View style={styles.modalHeaderRow}>
-                    <Text style={styles.modalTitle}>Day {editDay.day_number}</Text>
-                    <Text style={styles.modalDate}>{fmtDate(editDay.date)}</Text>
+                  {/* Sheet header */}
+                  <View style={styles.sheetHeaderRow}>
+                    <View>
+                      <View style={styles.sheetTitleRow}>
+                        <Text style={styles.sheetTitle}>Day {editDay.day_number}</Text>
+                        <Text style={styles.sheetDate}>{fmtDate(editDay.date)}</Text>
+                      </View>
+                      <View style={[styles.sheetTypeBadge, { backgroundColor: `${ds.color}15` }]}>
+                        <Text style={[styles.sheetTypeBadgeText, { color: ds.color }]}>
+                          {ds.emoji} {ds.label}
+                        </Text>
+                      </View>
+                    </View>
+                    {editTasks.length > 0 && (
+                      <View style={styles.sheetProgress}>
+                        <Text style={styles.sheetProgressNum}>{doneCount}/{editTasks.length}</Text>
+                        <Text style={styles.sheetProgressLabel}>done</Text>
+                      </View>
+                    )}
                   </View>
 
-                  <View style={[styles.modalTypeBadge, { backgroundColor: `${ds.color}15` }]}>
-                    <Text style={[styles.modalTypeBadgeText, { color: ds.color }]}>
-                      {ds.emoji} {ds.label}
-                    </Text>
-                  </View>
-
-                  <View style={styles.inputGroup}>
-                    <Text style={styles.inputLabel}>Focus Task</Text>
-                    <TextInput
-                      style={styles.modalInput}
-                      value={taskInput}
-                      onChangeText={setTaskInput}
-                      placeholder="What's the main task for this day?"
-                      placeholderTextColor="#333"
-                      autoFocus
-                      returnKeyType="next"
-                    />
-                  </View>
-
-                  <View style={styles.inputGroup}>
-                    <Text style={styles.inputLabel}>Notes (optional)</Text>
-                    <TextInput
-                      style={[styles.modalInput, styles.notesInput]}
-                      value={notesInput}
-                      onChangeText={setNotesInput}
-                      placeholder="Any extra context, links, or details..."
-                      placeholderTextColor="#333"
-                      multiline
-                      textAlignVertical="top"
-                    />
-                  </View>
-
-                  <TouchableOpacity
-                    style={[styles.saveBtn, saving && { opacity: 0.6 }]}
-                    onPress={saveTask}
-                    disabled={saving}
+                  {/* Task list */}
+                  <ScrollView
+                    style={styles.taskList}
+                    showsVerticalScrollIndicator={false}
+                    keyboardShouldPersistTaps="handled"
                   >
-                    {saving
-                      ? <ActivityIndicator color={colors.black} />
-                      : <Text style={styles.saveBtnText}>Save</Text>
-                    }
-                  </TouchableOpacity>
+                    {editTasks.length === 0 && (
+                      <Text style={styles.noTasksText}>No tasks yet — add one below</Text>
+                    )}
+                    {editTasks.map((task) => (
+                      <View key={task.id} style={styles.taskRow}>
+                        {task.color_tag ? (
+                          <View style={[styles.taskColorBar, { backgroundColor: COLOR_TAGS.find(c => c.key === task.color_tag)?.color ?? '#333' }]} />
+                        ) : null}
+                        <TouchableOpacity
+                          style={[styles.taskCheck, task.is_done && styles.taskCheckDone]}
+                          onPress={() => toggleDayTask(editDay.id, task.id)}
+                          activeOpacity={0.7}
+                        >
+                          {task.is_done && <Text style={styles.taskCheckMark}>✓</Text>}
+                        </TouchableOpacity>
+                        <Text style={[styles.taskRowText, task.is_done && styles.taskRowTextDone]} numberOfLines={2}>
+                          {task.title}
+                        </Text>
+                        <TouchableOpacity
+                          style={styles.taskDel}
+                          onPress={() => deleteDayTask(editDay.id, task.id)}
+                          activeOpacity={0.7}
+                        >
+                          <Text style={styles.taskDelText}>✕</Text>
+                        </TouchableOpacity>
+                      </View>
+                    ))}
+                  </ScrollView>
+
+                  {/* Add task row */}
+                  <View style={styles.addSection}>
+                    {/* Color picker */}
+                    <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 8 }}>
+                      <View style={styles.colorRow}>
+                        <TouchableOpacity
+                          style={[styles.colorDot, { backgroundColor: '#1e1e1e', borderColor: selectedColor === '' ? colors.white : '#2a2a2a' }]}
+                          onPress={() => setSelectedColor('')}
+                        >
+                          {selectedColor === '' && <Text style={{ fontSize: 8, color: colors.white }}>✕</Text>}
+                        </TouchableOpacity>
+                        {COLOR_TAGS.map((ct) => (
+                          <TouchableOpacity
+                            key={ct.key}
+                            style={[styles.colorDot, { backgroundColor: ct.color, borderColor: selectedColor === ct.key ? colors.white : 'transparent' }]}
+                            onPress={() => setSelectedColor(ct.key)}
+                          />
+                        ))}
+                      </View>
+                    </ScrollView>
+
+                    <View style={styles.addRow}>
+                      <TextInput
+                        style={styles.addInput}
+                        value={newTaskText}
+                        onChangeText={setNewTaskText}
+                        placeholder="New task..."
+                        placeholderTextColor="#333"
+                        returnKeyType="done"
+                        onSubmitEditing={handleAddTask}
+                      />
+                      <TouchableOpacity
+                        style={[styles.addBtn, (!newTaskText.trim() || addingTask) && styles.addBtnDisabled]}
+                        onPress={handleAddTask}
+                        disabled={!newTaskText.trim() || addingTask}
+                        activeOpacity={0.8}
+                      >
+                        {addingTask
+                          ? <ActivityIndicator color={colors.black} size="small" />
+                          : <Text style={styles.addBtnText}>+</Text>}
+                      </TouchableOpacity>
+                    </View>
+                  </View>
                 </>
               );
             })()}
@@ -337,7 +404,6 @@ const styles = StyleSheet.create({
   chipTextActive: { color: colors.black },
 
   listContent: { paddingHorizontal: 22, paddingTop: 14, paddingBottom: 100 },
-
   phaseRow: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 14 },
   phaseLabel: { fontSize: 10, color: '#333', fontWeight: '700', textTransform: 'uppercase', letterSpacing: 2, flexShrink: 0 },
   phaseLine: { flex: 1, height: 1, backgroundColor: '#161616' },
@@ -364,31 +430,59 @@ const styles = StyleSheet.create({
   statusDotToday: { backgroundColor: 'rgba(255,255,255,0.08)' },
   statusDotPaused: { backgroundColor: 'rgba(234,179,8,0.1)' },
   statusText: { fontSize: 11, fontWeight: '800', color: 'transparent' },
-
   emptyFilter: { paddingTop: 60, alignItems: 'center' },
   emptyFilterText: { fontSize: 14, color: '#333' },
 
+  // Sheet
   modalOverlay: { flex: 1, justifyContent: 'flex-end' },
   modalBg: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.65)' },
   modalSheet: {
     backgroundColor: '#111', borderTopLeftRadius: 28, borderTopRightRadius: 28,
-    padding: 24, paddingBottom: 40, gap: 16,
+    padding: 22, paddingBottom: 36, maxHeight: '80%',
   },
-  modalHandle: { width: 36, height: 4, backgroundColor: '#2a2a2a', borderRadius: 2, alignSelf: 'center', marginBottom: 4 },
-  modalHeaderRow: { flexDirection: 'row', alignItems: 'baseline', gap: 10 },
-  modalTitle: { fontSize: 20, fontWeight: '800', color: colors.white, letterSpacing: -0.4 },
-  modalDate: { fontSize: 13, color: '#444', fontWeight: '600' },
-  modalTypeBadge: { alignSelf: 'flex-start', paddingVertical: 6, paddingHorizontal: 12, borderRadius: 100 },
-  modalTypeBadgeText: { fontSize: 12, fontWeight: '700' },
+  modalHandle: { width: 36, height: 4, backgroundColor: '#2a2a2a', borderRadius: 2, alignSelf: 'center', marginBottom: 16 },
 
-  inputGroup: { gap: 6 },
-  inputLabel: { fontSize: 10, fontWeight: '700', color: '#444', textTransform: 'uppercase', letterSpacing: 1 },
-  modalInput: {
-    backgroundColor: '#1a1a1a', borderRadius: 12, padding: 14,
-    fontSize: 14, color: colors.white, borderWidth: 1, borderColor: '#2a2a2a',
+  sheetHeaderRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16 },
+  sheetTitleRow: { flexDirection: 'row', alignItems: 'baseline', gap: 8, marginBottom: 6 },
+  sheetTitle: { fontSize: 20, fontWeight: '800', color: colors.white, letterSpacing: -0.4 },
+  sheetDate: { fontSize: 13, color: '#444', fontWeight: '600' },
+  sheetTypeBadge: { alignSelf: 'flex-start', paddingVertical: 5, paddingHorizontal: 10, borderRadius: 100 },
+  sheetTypeBadgeText: { fontSize: 11, fontWeight: '700' },
+  sheetProgress: { alignItems: 'center', backgroundColor: '#1a1a1a', borderRadius: 12, paddingVertical: 8, paddingHorizontal: 14 },
+  sheetProgressNum: { fontSize: 18, fontWeight: '900', color: colors.white },
+  sheetProgressLabel: { fontSize: 9, color: '#444', fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.5 },
+
+  taskList: { maxHeight: 260, marginBottom: 12 },
+  noTasksText: { fontSize: 13, color: '#333', fontStyle: 'italic', paddingVertical: 16, textAlign: 'center' },
+
+  taskRow: {
+    flexDirection: 'row', alignItems: 'center', gap: 10,
+    paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: '#1a1a1a',
   },
-  notesInput: { minHeight: 80, textAlignVertical: 'top' },
+  taskColorBar: { width: 3, height: 20, borderRadius: 2 },
+  taskCheck: {
+    width: 22, height: 22, borderRadius: 7, borderWidth: 1.5, borderColor: '#2a2a2a',
+    alignItems: 'center', justifyContent: 'center',
+  },
+  taskCheckDone: { backgroundColor: colors.white, borderColor: colors.white },
+  taskCheckMark: { fontSize: 11, fontWeight: '900', color: colors.black },
+  taskRowText: { flex: 1, fontSize: 14, color: '#ccc', fontWeight: '500' },
+  taskRowTextDone: { color: '#333', textDecorationLine: 'line-through' },
+  taskDel: { padding: 4 },
+  taskDelText: { fontSize: 11, color: '#333', fontWeight: '700' },
 
-  saveBtn: { height: 52, backgroundColor: colors.white, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
-  saveBtnText: { fontSize: 15, fontWeight: '700', color: colors.black },
+  addSection: { borderTopWidth: 1, borderTopColor: '#1a1a1a', paddingTop: 12 },
+  colorRow: { flexDirection: 'row', gap: 8, alignItems: 'center', marginBottom: 0 },
+  colorDot: { width: 22, height: 22, borderRadius: 11, borderWidth: 2, alignItems: 'center', justifyContent: 'center' },
+  addRow: { flexDirection: 'row', gap: 8, alignItems: 'center' },
+  addInput: {
+    flex: 1, backgroundColor: '#1a1a1a', borderRadius: 12,
+    padding: 13, fontSize: 14, color: colors.white, borderWidth: 1, borderColor: '#2a2a2a',
+  },
+  addBtn: {
+    width: 46, height: 46, backgroundColor: colors.white,
+    borderRadius: 12, alignItems: 'center', justifyContent: 'center',
+  },
+  addBtnDisabled: { opacity: 0.3 },
+  addBtnText: { fontSize: 22, fontWeight: '700', color: colors.black },
 });

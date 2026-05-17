@@ -129,6 +129,63 @@ export async function scheduleLeadFollowUp(leadName: string, followUpDate: strin
   } catch {}
 }
 
+export async function scheduleRoutineAlarm(
+  alarmId: string,
+  itemTitle: string,
+  hour: number,
+  minute: number,
+  frequency: 'daily' | 'weekdays' | 'weekends',
+) {
+  try {
+    const identifier = `routine-alarm-${alarmId}`;
+    await Notifications.cancelScheduledNotificationAsync(identifier).catch(() => {});
+
+    if (frequency === 'daily') {
+      await Notifications.scheduleNotificationAsync({
+        identifier,
+        content: {
+          title: `Routine reminder 🔔`,
+          body: itemTitle,
+          sound: true,
+        },
+        trigger: {
+          type: Notifications.SchedulableTriggerInputTypes.DAILY,
+          hour,
+          minute,
+        },
+      });
+    } else {
+      // weekdays: Mon-Fri (2-6), weekends: Sat-Sun (1,7)
+      const days = frequency === 'weekdays' ? [2, 3, 4, 5, 6] : [1, 7];
+      for (const weekday of days) {
+        await Notifications.scheduleNotificationAsync({
+          identifier: `${identifier}-${weekday}`,
+          content: {
+            title: `Routine reminder 🔔`,
+            body: itemTitle,
+            sound: true,
+          },
+          trigger: {
+            type: Notifications.SchedulableTriggerInputTypes.WEEKLY,
+            weekday,
+            hour,
+            minute,
+          },
+        });
+      }
+    }
+  } catch {}
+}
+
+export async function cancelRoutineAlarms(alarmId: string) {
+  const identifier = `routine-alarm-${alarmId}`;
+  await Notifications.cancelScheduledNotificationAsync(identifier).catch(() => {});
+  // Also cancel any weekday/weekend sub-identifiers
+  for (let i = 1; i <= 7; i++) {
+    await Notifications.cancelScheduledNotificationAsync(`${identifier}-${i}`).catch(() => {});
+  }
+}
+
 export async function cancelNotification(id: string) {
   await Notifications.cancelScheduledNotificationAsync(id).catch(() => {});
 }

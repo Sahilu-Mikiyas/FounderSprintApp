@@ -12,17 +12,33 @@ import { getDayTypeStyle, getSprintProgress, getDayNumber, formatGreeting, forma
 import { AnimatedCard } from '../../components/AnimatedCard';
 import { AnimatedProgressBar } from '../../components/AnimatedProgressBar';
 
+const COLOR_TAG_MAP: Record<string, string> = {
+  green: '#22C55E',
+  blue: '#3B82F6',
+  yellow: '#EAB308',
+  red: '#EF4444',
+  purple: '#A855F7',
+  orange: '#F97316',
+};
+
 export default function TodayScreen() {
   const router = useRouter();
   const { user } = useAuthStore();
   const {
     sprint, today, routine, completions, pausesThisWeek,
-    loading, fetchToday, toggleRoutine, pauseDay, markDayDone,
+    loading, dayTasks, fetchToday, fetchDayTasks, toggleRoutine,
+    toggleDayTask, pauseDay, markDayDone,
   } = useSprintStore();
 
   useEffect(() => {
     if (user) fetchToday(user.id);
   }, [user]);
+
+  useEffect(() => {
+    if (today && !dayTasks[today.id]) {
+      fetchDayTasks(today.id);
+    }
+  }, [today]);
 
   const onRefresh = useCallback(() => {
     if (user) fetchToday(user.id);
@@ -120,28 +136,67 @@ export default function TodayScreen() {
             {isPaused && <Text style={[styles.statusBadge, { color: colors.learning }]}>⏸ Paused</Text>}
           </View>
 
-          {/* ── Today's focus task ── */}
-          <AnimatedCard delay={100}>
-            <Text style={styles.sectionTitle}>{dayStyle.label} Task</Text>
-            <View style={styles.card}>
-              <Text style={styles.cardLabel}>Today's Focus</Text>
-              {today?.task_title ? (
-                <>
-                  <Text style={styles.cardText}>{today.task_title}</Text>
-                  {today.task_notes ? (
-                    <Text style={styles.cardNotes}>{today.task_notes}</Text>
-                  ) : null}
-                </>
-              ) : (
-                <Text style={styles.cardEmpty}>No task set — go to the Sprint tab to add one</Text>
-              )}
-              <View style={[styles.cardTag, { backgroundColor: `${dayStyle.color}15` }]}>
-                <Text style={[styles.cardTagText, { color: dayStyle.color }]}>
-                  {dayStyle.emoji} {dayStyle.label}
-                </Text>
-              </View>
-            </View>
-          </AnimatedCard>
+          {/* ── Today's tasks checklist ── */}
+          {(() => {
+            const tasks = today ? (dayTasks[today.id] ?? []) : [];
+            const taskDone = tasks.filter((t) => t.is_done).length;
+            const taskTotal = tasks.length;
+            const taskPct = taskTotal > 0 ? Math.round((taskDone / taskTotal) * 100) : 0;
+            return (
+              <AnimatedCard delay={100}>
+                <View style={styles.sectionRow}>
+                  <Text style={styles.sectionTitle}>{dayStyle.label} Tasks</Text>
+                  {taskTotal > 0 && (
+                    <Text style={styles.sectionCount}>{taskDone}/{taskTotal}</Text>
+                  )}
+                </View>
+                <View style={styles.card}>
+                  {taskTotal > 0 && (
+                    <View style={styles.taskPctTrack}>
+                      <AnimatedProgressBar pct={taskPct} color={dayStyle.color} height={3} delay={400} />
+                    </View>
+                  )}
+                  {tasks.length === 0 ? (
+                    <>
+                      {today?.task_title ? (
+                        <>
+                          <Text style={styles.cardText}>{today.task_title}</Text>
+                          {today.task_notes ? <Text style={styles.cardNotes}>{today.task_notes}</Text> : null}
+                        </>
+                      ) : (
+                        <Text style={styles.cardEmpty}>No tasks set — go to the Sprint tab to add some</Text>
+                      )}
+                    </>
+                  ) : (
+                    tasks.map((task, i) => {
+                      const barColor = task.color_tag ? (COLOR_TAG_MAP[task.color_tag] ?? '#333') : null;
+                      return (
+                        <TouchableOpacity
+                          key={task.id}
+                          style={[styles.taskRow, i === tasks.length - 1 && { borderBottomWidth: 0 }]}
+                          onPress={() => today && toggleDayTask(today.id, task.id)}
+                          activeOpacity={0.7}
+                        >
+                          {barColor && <View style={[styles.taskColorBar, { backgroundColor: barColor }]} />}
+                          <View style={[styles.taskCheck, task.is_done && styles.taskCheckOn]}>
+                            {task.is_done && <Text style={styles.taskCheckMark}>✓</Text>}
+                          </View>
+                          <Text style={[styles.taskText, task.is_done && styles.taskTextDone]} numberOfLines={2}>
+                            {task.title}
+                          </Text>
+                        </TouchableOpacity>
+                      );
+                    })
+                  )}
+                  <View style={[styles.cardTag, { backgroundColor: `${dayStyle.color}15` }]}>
+                    <Text style={[styles.cardTagText, { color: dayStyle.color }]}>
+                      {dayStyle.emoji} {dayStyle.label}
+                    </Text>
+                  </View>
+                </View>
+              </AnimatedCard>
+            );
+          })()}
 
           {/* ── Daily routine checklist ── */}
           <AnimatedCard delay={200}>
@@ -213,6 +268,26 @@ export default function TodayScreen() {
             >
               <Text style={styles.quickBtnIcon}>💰</Text>
               <Text style={styles.quickBtnText}>Log Revenue</Text>
+            </TouchableOpacity>
+          </View>
+
+          {/* ── Focus & Routines shortcuts ── */}
+          <View style={styles.quickRow}>
+            <TouchableOpacity
+              style={styles.quickBtn}
+              onPress={() => router.push('/focus')}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.quickBtnIcon}>⏱️</Text>
+              <Text style={styles.quickBtnText}>Focus</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.quickBtn}
+              onPress={() => router.push('/routines')}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.quickBtnIcon}>📋</Text>
+              <Text style={styles.quickBtnText}>Routines</Text>
             </TouchableOpacity>
           </View>
 
@@ -335,4 +410,19 @@ const styles = StyleSheet.create({
     alignItems: 'center', justifyContent: 'center',
   },
   completedBannerText: { fontSize: 14, fontWeight: '700', color: colors.revenue },
+
+  taskPctTrack: { height: 3, backgroundColor: '#1e1e1e', borderRadius: 2, overflow: 'hidden', marginBottom: 12 },
+  taskRow: {
+    flexDirection: 'row', alignItems: 'center', gap: 10,
+    paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: '#151515',
+  },
+  taskColorBar: { width: 3, height: 18, borderRadius: 2 },
+  taskCheck: {
+    width: 22, height: 22, borderRadius: 7, borderWidth: 1.5, borderColor: '#2a2a2a',
+    alignItems: 'center', justifyContent: 'center',
+  },
+  taskCheckOn: { backgroundColor: colors.white, borderColor: colors.white },
+  taskCheckMark: { fontSize: 11, fontWeight: '900', color: colors.black },
+  taskText: { flex: 1, fontSize: 14, color: '#ccc', fontWeight: '500' },
+  taskTextDone: { color: '#333', textDecorationLine: 'line-through' },
 });

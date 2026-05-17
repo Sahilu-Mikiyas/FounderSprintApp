@@ -28,21 +28,38 @@ export interface RoutineItem {
   title: string;
   duration_minutes: number | null;
   sort_order: number;
+  category_id?: string | null;
+}
+
+export interface SprintDayTask {
+  id: string;
+  sprint_day_id: string;
+  title: string;
+  notes: string | null;
+  is_done: boolean;
+  sort_order: number;
+  color_tag: string | null;
 }
 
 interface SprintStore {
   sprint: Sprint | null;
   today: SprintDay | null;
-  sprintDays: SprintDay[]; // all days — used by Sprint tab
+  sprintDays: SprintDay[];
   routine: RoutineItem[];
-  completions: string[]; // routine_item_ids completed today
+  completions: string[];
   pausesThisWeek: number;
   loading: boolean;
+  dayTasks: Record<string, SprintDayTask[]>; // keyed by sprint_day_id
   fetchToday: (userId: string) => Promise<void>;
   toggleRoutine: (itemId: string, userId: string) => Promise<void>;
   pauseDay: (userId: string) => Promise<void>;
   markDayDone: (userId: string) => Promise<void>;
   updateDayTask: (dayId: string, title: string, notes: string) => Promise<void>;
+  fetchDayTasks: (dayId: string) => Promise<void>;
+  addDayTask: (dayId: string, title: string, notes?: string, colorTag?: string) => Promise<void>;
+  toggleDayTask: (dayId: string, taskId: string) => Promise<void>;
+  deleteDayTask: (dayId: string, taskId: string) => Promise<void>;
+  updateDayTaskItem: (dayId: string, taskId: string, title: string, notes: string) => Promise<void>;
 }
 
 function getWeekNumber(date: Date): number {
@@ -68,6 +85,7 @@ export const useSprintStore = create<SprintStore>((set, get) => ({
   completions: [],
   pausesThisWeek: 0,
   loading: true,
+  dayTasks: {},
 
   fetchToday: async (userId: string) => {
     set({ loading: true });
@@ -206,5 +224,74 @@ export const useSprintStore = create<SprintStore>((set, get) => ({
       ? { ...today, task_title: title || null, task_notes: notes || null }
       : today;
     set({ sprintDays: updatedDays, today: updatedToday });
+  },
+
+  fetchDayTasks: async (dayId: string) => {
+    const { data } = await supabase
+      .from('sprint_day_tasks')
+      .select('*')
+      .eq('sprint_day_id', dayId)
+      .order('sort_order');
+    set((s) => ({ dayTasks: { ...s.dayTasks, [dayId]: data ?? [] } }));
+  },
+
+  addDayTask: async (dayId: string, title: string, notes = '', colorTag = '') => {
+    const { dayTasks } = get();
+    const existing = dayTasks[dayId] ?? [];
+    const { data } = await supabase
+      .from('sprint_day_tasks')
+      .insert({
+        sprint_day_id: dayId,
+        title,
+        notes: notes || null,
+        color_tag: colorTag || null,
+        is_done: false,
+        sort_order: existing.length,
+      })
+      .select()
+      .single();
+    if (data) {
+      set((s) => ({ dayTasks: { ...s.dayTasks, [dayId]: [...(s.dayTasks[dayId] ?? []), data] } }));
+    }
+  },
+
+  toggleDayTask: async (dayId: string, taskId: string) => {
+    const { dayTasks } = get();
+    const tasks = dayTasks[dayId] ?? [];
+    const task = tasks.find((t) => t.id === taskId);
+    if (!task) return;
+    const newDone = !task.is_done;
+    await supabase.from('sprint_day_tasks').update({ is_done: newDone }).eq('id', taskId);
+    set((s) => ({
+      dayTasks: {
+        ...s.dayTasks,
+        [dayId]: (s.dayTasks[dayId] ?? []).map((t) => t.id === taskId ? { ...t, is_done: newDone } : t),
+      },
+    }));
+  },
+
+  deleteDayTask: async (dayId: string, taskId: string) => {
+    await supabase.from('sprint_day_tasks').delete().eq('id', taskId);
+    set((s) => ({
+      dayTasks: {
+        ...s.dayTasks,
+        [dayId]: (s.dayTasks[dayId] ?? []).filter((t) => t.id !== taskId),
+      },
+    }));
+  },
+
+  updateDayTaskItem: async (dayId: string, taskId: string, title: string, notes: string) => {
+    await supabase
+      .from('sprint_day_tasks')
+      .update({ title, notes: notes || null })
+      .eq('id', taskId);
+    set((s) => ({
+      dayTasks: {
+        ...s.dayTasks,
+        [dayId]: (s.dayTasks[dayId] ?? []).map((t) =>
+          t.id === taskId ? { ...t, title, notes: notes || null } : t
+        ),
+      },
+    }));
   },
 }));

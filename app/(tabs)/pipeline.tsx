@@ -9,6 +9,7 @@ import { useAuthStore } from '../../store/authStore';
 import { useSprintStore } from '../../store/sprintStore';
 import { supabase } from '../../lib/supabase';
 import { colors } from '../../lib/colors';
+import { scheduleLeadFollowUp } from '../../lib/notifications';
 import { AnimatedCard } from '../../components/AnimatedCard';
 
 interface Lead {
@@ -121,7 +122,10 @@ export default function PipelineScreen() {
       if (data) setLeads((prev) => prev.map((l) => l.id === editLead.id ? data : l));
     } else {
       const { data } = await supabase.from('leads').insert(payload).select().single();
-      if (data) setLeads((prev) => [data, ...prev]);
+      if (data) {
+        setLeads((prev) => [data, ...prev]);
+        if (data.follow_up_date) scheduleLeadFollowUp(data.name, data.follow_up_date, data.id);
+      }
     }
     setSaving(false);
     setShowAdd(false);
