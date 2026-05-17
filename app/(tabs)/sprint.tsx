@@ -21,10 +21,10 @@ const FILTERS: { label: string; id: string | null }[] = [
 ];
 
 const COLOR_TAGS = [
-  { key: 'green', color: '#22C55E' },
-  { key: 'blue', color: '#3B82F6' },
+  { key: 'green',  color: '#22C55E' },
+  { key: 'blue',   color: '#3B82F6' },
   { key: 'yellow', color: '#EAB308' },
-  { key: 'red', color: '#EF4444' },
+  { key: 'red',    color: '#EF4444' },
   { key: 'purple', color: '#A855F7' },
   { key: 'orange', color: '#F97316' },
 ];
@@ -39,7 +39,10 @@ function getPhase(dayNum: number, total: number): 0 | 1 | 2 {
 }
 
 function fmtDate(dateStr: string) {
-  return new Date(dateStr + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  const d = new Date(dateStr + 'T00:00:00');
+  const isToday = dateStr === new Date().toISOString().split('T')[0];
+  if (isToday) return 'Today';
+  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 }
 
 function fmtRange(start: string, end: string) {
@@ -49,10 +52,14 @@ function fmtRange(start: string, end: string) {
 }
 
 function modeLabel(mode: string) {
-  if (mode === 'custom') return 'Custom Sprint';
-  if (mode === 'prebuilt') return 'Pre-Built Sprint';
-  if (mode === 'rotation') return 'Rotation Sprint';
-  return 'Sprint';
+  if (mode === 'custom') return '📅 Sprint';
+  if (mode === 'prebuilt') return '📅 Sprint';
+  if (mode === 'rotation') return '📅 Sprint';
+  return '📅 Sprint';
+}
+
+function colorOf(key: string | null) {
+  return COLOR_TAGS.find((c) => c.key === key)?.color ?? null;
 }
 
 export default function SprintScreen() {
@@ -64,13 +71,18 @@ export default function SprintScreen() {
 
   const [filter, setFilter] = useState<string | null>(null);
   const [editDay, setEditDay] = useState<SprintDay | null>(null);
-  const [newTaskText, setNewTaskText] = useState('');
+
+  // Add-task form state — collapsed by default
+  const [showAddForm, setShowAddForm] = useState(false);
+  const [newTaskTitle, setNewTaskTitle] = useState('');
+  const [newTaskNotes, setNewTaskNotes] = useState('');
   const [selectedColor, setSelectedColor] = useState<string>('');
   const [addingTask, setAddingTask] = useState(false);
 
   const scrollRef = useRef<ScrollView>(null);
   const todayStr = new Date().toISOString().split('T')[0];
   const todayRowY = useRef<number>(0);
+  const titleInputRef = useRef<TextInput>(null);
 
   useEffect(() => {
     if (user && !sprint) fetchToday(user.id);
@@ -84,19 +96,31 @@ export default function SprintScreen() {
 
   async function openSheet(day: SprintDay) {
     setEditDay(day);
-    setNewTaskText('');
+    setShowAddForm(false);
+    setNewTaskTitle('');
+    setNewTaskNotes('');
     setSelectedColor('');
     if (!dayTasks[day.id]) {
       await fetchDayTasks(day.id);
     }
   }
 
-  async function handleAddTask() {
-    if (!editDay || !newTaskText.trim()) return;
-    setAddingTask(true);
-    await addDayTask(editDay.id, newTaskText.trim(), '', selectedColor);
-    setNewTaskText('');
+  function closeSheet() {
+    setEditDay(null);
+    setShowAddForm(false);
+    setNewTaskTitle('');
+    setNewTaskNotes('');
     setSelectedColor('');
+  }
+
+  async function handleAddTask() {
+    if (!editDay || !newTaskTitle.trim()) return;
+    setAddingTask(true);
+    await addDayTask(editDay.id, newTaskTitle.trim(), newTaskNotes.trim(), selectedColor);
+    setNewTaskTitle('');
+    setNewTaskNotes('');
+    setSelectedColor('');
+    setShowAddForm(false);
     setAddingTask(false);
   }
 
@@ -129,11 +153,11 @@ export default function SprintScreen() {
       <View style={styles.header}>
         <View style={{ flex: 1 }}>
           <Text style={styles.title}>{modeLabel(sprint.mode)}</Text>
-          <Text style={styles.subtitle}>{fmtRange(sprint.start_date, sprint.end_date)}</Text>
+          <Text style={styles.subtitle}>Day {dayNum} of {totalDays} · {fmtRange(sprint.start_date, sprint.end_date)}</Text>
         </View>
         <View style={styles.progressBox}>
           <Text style={styles.progressNum}>{progress}%</Text>
-          <Text style={styles.progressLabel}>Day {dayNum}</Text>
+          <Text style={styles.progressLabel}>Done</Text>
         </View>
       </View>
 
@@ -187,7 +211,7 @@ export default function SprintScreen() {
                 const isPaused = day.status === 'paused';
                 const isFuture = day.date > todayStr;
                 const tasks = dayTasks[day.id] ?? [];
-                const taskDone = tasks.filter((t) => t.is_done).length;
+                const taskDoneCount = tasks.filter((t) => t.is_done).length;
                 const taskTotal = tasks.length;
 
                 return (
@@ -200,7 +224,7 @@ export default function SprintScreen() {
                     }}
                     activeOpacity={0.75}
                   >
-                    <Text style={[styles.dayNum, (isDone || isFuture) && styles.dayNumFaded]}>
+                    <Text style={[styles.dayNum, (isDone || isFuture) && !isToday && styles.dayNumFaded]}>
                       {day.day_number}
                     </Text>
                     <Text style={styles.dayDate}>{fmtDate(day.date)}</Text>
@@ -211,13 +235,11 @@ export default function SprintScreen() {
                     </View>
                     <View style={styles.taskPreview}>
                       {taskTotal > 0 ? (
-                        <Text style={styles.taskText} numberOfLines={1}>
-                          {taskDone}/{taskTotal} tasks
+                        <Text style={styles.taskPreviewText} numberOfLines={1}>
+                          {taskDoneCount}/{taskTotal} tasks
                         </Text>
-                      ) : day.task_title ? (
-                        <Text style={styles.taskText} numberOfLines={1}>{day.task_title}</Text>
                       ) : (
-                        <Text style={styles.taskEmpty}>+ Add tasks</Text>
+                        <Text style={styles.taskPreviewEmpty}>+ Add tasks</Text>
                       )}
                     </View>
                     <View style={[
@@ -230,7 +252,7 @@ export default function SprintScreen() {
                         styles.statusText,
                         isDone && { color: colors.revenue },
                         isToday && !isDone && { color: colors.white },
-                        isPaused && { color: colors.learning },
+                        isPaused && { color: '#EAB308' },
                       ]}>
                         {isDone ? '✓' : isPaused ? '⏸' : isToday ? '●' : ''}
                       </Text>
@@ -249,36 +271,33 @@ export default function SprintScreen() {
         )}
       </ScrollView>
 
-      {/* Task Manager Bottom Sheet */}
+      {/* ── Task Manager Bottom Sheet ── */}
       <Modal
         visible={!!editDay}
         transparent
         animationType="slide"
-        onRequestClose={() => setEditDay(null)}
+        onRequestClose={closeSheet}
       >
         <KeyboardAvoidingView
           style={styles.modalOverlay}
           behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         >
-          <TouchableOpacity style={styles.modalBg} onPress={() => setEditDay(null)} activeOpacity={1} />
+          <TouchableOpacity style={styles.modalBg} onPress={closeSheet} activeOpacity={1} />
+
           <View style={styles.modalSheet}>
             <View style={styles.modalHandle} />
 
             {editDay && (() => {
               const ds = getDayTypeStyle(editDay.day_type);
+              const dateLabel = fmtDate(editDay.date);
               return (
                 <>
                   {/* Sheet header */}
                   <View style={styles.sheetHeaderRow}>
-                    <View>
+                    <View style={{ flex: 1 }}>
                       <View style={styles.sheetTitleRow}>
                         <Text style={styles.sheetTitle}>Day {editDay.day_number}</Text>
-                        <Text style={styles.sheetDate}>{fmtDate(editDay.date)}</Text>
-                      </View>
-                      <View style={[styles.sheetTypeBadge, { backgroundColor: `${ds.color}15` }]}>
-                        <Text style={[styles.sheetTypeBadgeText, { color: ds.color }]}>
-                          {ds.emoji} {ds.label}
-                        </Text>
+                        <Text style={styles.sheetDate}>{dateLabel}</Text>
                       </View>
                     </View>
                     {editTasks.length > 0 && (
@@ -289,84 +308,153 @@ export default function SprintScreen() {
                     )}
                   </View>
 
-                  {/* Task list */}
+                  {/* Day type badge */}
+                  <View style={[styles.sheetTypeBadge, { backgroundColor: `${ds.color}15` }]}>
+                    <Text style={[styles.sheetTypeBadgeText, { color: ds.color }]}>
+                      {ds.emoji} {ds.label}
+                    </Text>
+                  </View>
+
+                  {/* FOCUS TASKS label */}
+                  <Text style={styles.tasksLabel}>Focus Tasks</Text>
+
+                  {/* Task list — grouped card */}
                   <ScrollView
-                    style={styles.taskList}
+                    style={styles.taskListScroll}
                     showsVerticalScrollIndicator={false}
                     keyboardShouldPersistTaps="handled"
                   >
-                    {editTasks.length === 0 && (
-                      <Text style={styles.noTasksText}>No tasks yet — add one below</Text>
-                    )}
-                    {editTasks.map((task) => (
-                      <View key={task.id} style={styles.taskRow}>
-                        {task.color_tag ? (
-                          <View style={[styles.taskColorBar, { backgroundColor: COLOR_TAGS.find(c => c.key === task.color_tag)?.color ?? '#333' }]} />
-                        ) : null}
-                        <TouchableOpacity
-                          style={[styles.taskCheck, task.is_done && styles.taskCheckDone]}
-                          onPress={() => toggleDayTask(editDay.id, task.id)}
-                          activeOpacity={0.7}
-                        >
-                          {task.is_done && <Text style={styles.taskCheckMark}>✓</Text>}
-                        </TouchableOpacity>
-                        <Text style={[styles.taskRowText, task.is_done && styles.taskRowTextDone]} numberOfLines={2}>
-                          {task.title}
-                        </Text>
-                        <TouchableOpacity
-                          style={styles.taskDel}
-                          onPress={() => deleteDayTask(editDay.id, task.id)}
-                          activeOpacity={0.7}
-                        >
-                          <Text style={styles.taskDelText}>✕</Text>
-                        </TouchableOpacity>
+                    {editTasks.length === 0 && !showAddForm && (
+                      <View style={styles.emptyTasksCard}>
+                        <Text style={styles.noTasksText}>No tasks yet</Text>
                       </View>
-                    ))}
+                    )}
+
+                    {editTasks.length > 0 && (
+                      <View style={styles.taskCard}>
+                        {editTasks.map((task, i) => {
+                          const barColor = colorOf(task.color_tag);
+                          return (
+                            <View
+                              key={task.id}
+                              style={[styles.taskRow, i === editTasks.length - 1 && { borderBottomWidth: 0 }]}
+                            >
+                              {barColor && (
+                                <View style={[styles.taskColorBar, { backgroundColor: barColor }]} />
+                              )}
+                              <TouchableOpacity
+                                style={[styles.taskCheck, task.is_done && styles.taskCheckDone]}
+                                onPress={() => toggleDayTask(editDay.id, task.id)}
+                                activeOpacity={0.7}
+                              >
+                                {task.is_done && <Text style={styles.taskCheckMark}>✓</Text>}
+                              </TouchableOpacity>
+                              <View style={{ flex: 1 }}>
+                                <Text style={[styles.taskRowText, task.is_done && styles.taskRowTextDone]}>
+                                  {task.title}
+                                </Text>
+                                {task.notes ? (
+                                  <Text style={styles.taskRowNotes} numberOfLines={1}>{task.notes}</Text>
+                                ) : null}
+                              </View>
+                              <TouchableOpacity
+                                style={styles.taskDel}
+                                onPress={() => deleteDayTask(editDay.id, task.id)}
+                                activeOpacity={0.7}
+                              >
+                                <Text style={styles.taskDelText}>✕</Text>
+                              </TouchableOpacity>
+                            </View>
+                          );
+                        })}
+                      </View>
+                    )}
+
+                    {/* Expanded add-task form */}
+                    {showAddForm && (
+                      <View style={styles.addFormCard}>
+                        {/* Color chips */}
+                        <View style={styles.colorRow}>
+                          <TouchableOpacity
+                            style={[styles.colorDot, { backgroundColor: '#1e1e1e', borderColor: selectedColor === '' ? colors.white : '#2a2a2a' }]}
+                            onPress={() => setSelectedColor('')}
+                          >
+                            {selectedColor === '' && <Text style={{ fontSize: 8, color: '#666' }}>✕</Text>}
+                          </TouchableOpacity>
+                          {COLOR_TAGS.map((ct) => (
+                            <TouchableOpacity
+                              key={ct.key}
+                              style={[
+                                styles.colorDot,
+                                { backgroundColor: ct.color },
+                                selectedColor === ct.key && styles.colorDotSelected,
+                              ]}
+                              onPress={() => setSelectedColor(ct.key)}
+                            />
+                          ))}
+                        </View>
+
+                        {/* Title input */}
+                        <TextInput
+                          ref={titleInputRef}
+                          style={styles.addInput}
+                          value={newTaskTitle}
+                          onChangeText={setNewTaskTitle}
+                          placeholder="Task title..."
+                          placeholderTextColor="#444"
+                          returnKeyType="next"
+                          autoFocus
+                        />
+
+                        {/* Notes input */}
+                        <TextInput
+                          style={[styles.addInput, { marginTop: 8, fontSize: 13, color: '#888' }]}
+                          value={newTaskNotes}
+                          onChangeText={setNewTaskNotes}
+                          placeholder="Notes (optional)..."
+                          placeholderTextColor="#333"
+                          returnKeyType="done"
+                          onSubmitEditing={handleAddTask}
+                        />
+
+                        {/* Add + Cancel */}
+                        <View style={styles.addFormActions}>
+                          <TouchableOpacity
+                            style={styles.cancelAddBtn}
+                            onPress={() => { setShowAddForm(false); setNewTaskTitle(''); setNewTaskNotes(''); setSelectedColor(''); }}
+                          >
+                            <Text style={styles.cancelAddText}>Cancel</Text>
+                          </TouchableOpacity>
+                          <TouchableOpacity
+                            style={[styles.confirmAddBtn, (!newTaskTitle.trim() || addingTask) && { opacity: 0.4 }]}
+                            onPress={handleAddTask}
+                            disabled={!newTaskTitle.trim() || addingTask}
+                            activeOpacity={0.8}
+                          >
+                            {addingTask
+                              ? <ActivityIndicator color={colors.black} size="small" />
+                              : <Text style={styles.confirmAddText}>Add Task</Text>}
+                          </TouchableOpacity>
+                        </View>
+                      </View>
+                    )}
                   </ScrollView>
 
-                  {/* Add task row */}
-                  <View style={styles.addSection}>
-                    {/* Color picker */}
-                    <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 8 }}>
-                      <View style={styles.colorRow}>
-                        <TouchableOpacity
-                          style={[styles.colorDot, { backgroundColor: '#1e1e1e', borderColor: selectedColor === '' ? colors.white : '#2a2a2a' }]}
-                          onPress={() => setSelectedColor('')}
-                        >
-                          {selectedColor === '' && <Text style={{ fontSize: 8, color: colors.white }}>✕</Text>}
-                        </TouchableOpacity>
-                        {COLOR_TAGS.map((ct) => (
-                          <TouchableOpacity
-                            key={ct.key}
-                            style={[styles.colorDot, { backgroundColor: ct.color, borderColor: selectedColor === ct.key ? colors.white : 'transparent' }]}
-                            onPress={() => setSelectedColor(ct.key)}
-                          />
-                        ))}
-                      </View>
-                    </ScrollView>
+                  {/* Dashed "+ Add focus task" button — hidden when form is open */}
+                  {!showAddForm && (
+                    <TouchableOpacity
+                      style={styles.addTaskBtn}
+                      onPress={() => setShowAddForm(true)}
+                      activeOpacity={0.7}
+                    >
+                      <Text style={styles.addTaskBtnText}>＋  Add focus task</Text>
+                    </TouchableOpacity>
+                  )}
 
-                    <View style={styles.addRow}>
-                      <TextInput
-                        style={styles.addInput}
-                        value={newTaskText}
-                        onChangeText={setNewTaskText}
-                        placeholder="New task..."
-                        placeholderTextColor="#333"
-                        returnKeyType="done"
-                        onSubmitEditing={handleAddTask}
-                      />
-                      <TouchableOpacity
-                        style={[styles.addBtn, (!newTaskText.trim() || addingTask) && styles.addBtnDisabled]}
-                        onPress={handleAddTask}
-                        disabled={!newTaskText.trim() || addingTask}
-                        activeOpacity={0.8}
-                      >
-                        {addingTask
-                          ? <ActivityIndicator color={colors.black} size="small" />
-                          : <Text style={styles.addBtnText}>+</Text>}
-                      </TouchableOpacity>
-                    </View>
-                  </View>
+                  {/* Save Tasks white button */}
+                  <TouchableOpacity style={styles.saveBtn} onPress={closeSheet} activeOpacity={0.85}>
+                    <Text style={styles.saveBtnText}>Save Tasks</Text>
+                  </TouchableOpacity>
                 </>
               );
             })()}
@@ -387,13 +475,13 @@ const styles = StyleSheet.create({
     paddingHorizontal: 22, paddingTop: 16, paddingBottom: 14,
     flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start',
   },
-  title: { fontSize: 20, fontWeight: '800', color: colors.white, letterSpacing: -0.5 },
+  title: { fontSize: 20, fontWeight: '900', color: colors.white, letterSpacing: -0.5 },
   subtitle: { fontSize: 11, color: '#444', marginTop: 3 },
   progressBox: {
     backgroundColor: '#111', borderWidth: 1, borderColor: '#1a1a1a',
-    borderRadius: 12, paddingVertical: 8, paddingHorizontal: 14, alignItems: 'center',
+    borderRadius: 12, paddingVertical: 8, paddingHorizontal: 16, alignItems: 'center',
   },
-  progressNum: { fontSize: 18, fontWeight: '900', color: colors.white },
+  progressNum: { fontSize: 20, fontWeight: '900', color: colors.white },
   progressLabel: { fontSize: 9, color: '#444', fontWeight: '700', textTransform: 'uppercase', letterSpacing: 1, marginTop: 1 },
 
   filterScroll: { maxHeight: 44 },
@@ -410,21 +498,21 @@ const styles = StyleSheet.create({
 
   dayRow: {
     flexDirection: 'row', alignItems: 'center', gap: 8,
-    paddingVertical: 9, borderBottomWidth: 1, borderBottomColor: '#111',
+    paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: '#111',
   },
   dayRowToday: {
     backgroundColor: '#161616', borderRadius: 12,
     paddingHorizontal: 10, marginHorizontal: -10,
     borderBottomWidth: 0, marginBottom: 2, paddingVertical: 11,
   },
-  dayNum: { width: 26, fontSize: 13, fontWeight: '700', color: '#333', textAlign: 'center' },
-  dayNumFaded: { color: '#1e1e1e' },
-  dayDate: { fontSize: 11, color: '#444', width: 48 },
-  typePill: { paddingVertical: 4, paddingHorizontal: 8, borderRadius: 7, width: 110 },
+  dayNum: { width: 26, fontSize: 13, fontWeight: '700', color: colors.white, textAlign: 'center' },
+  dayNumFaded: { color: '#222' },
+  dayDate: { fontSize: 11, color: '#444', width: 50 },
+  typePill: { paddingVertical: 4, paddingHorizontal: 8, borderRadius: 7, width: 112 },
   typePillText: { fontSize: 10, fontWeight: '700' },
   taskPreview: { flex: 1 },
-  taskText: { fontSize: 12, color: '#666', fontWeight: '500' },
-  taskEmpty: { fontSize: 12, color: '#2a2a2a', fontStyle: 'italic' },
+  taskPreviewText: { fontSize: 12, color: '#666', fontWeight: '500' },
+  taskPreviewEmpty: { fontSize: 12, color: '#2a2a2a', fontStyle: 'italic' },
   statusDot: { width: 22, height: 22, borderRadius: 11, alignItems: 'center', justifyContent: 'center' },
   statusDotDone: { backgroundColor: 'rgba(34,197,94,0.1)' },
   statusDotToday: { backgroundColor: 'rgba(255,255,255,0.08)' },
@@ -433,56 +521,98 @@ const styles = StyleSheet.create({
   emptyFilter: { paddingTop: 60, alignItems: 'center' },
   emptyFilterText: { fontSize: 14, color: '#333' },
 
-  // Sheet
+  // ── Sheet ──
   modalOverlay: { flex: 1, justifyContent: 'flex-end' },
-  modalBg: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.65)' },
+  modalBg: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.7)' },
   modalSheet: {
-    backgroundColor: '#111', borderTopLeftRadius: 28, borderTopRightRadius: 28,
-    padding: 22, paddingBottom: 36, maxHeight: '80%',
+    backgroundColor: '#111',
+    borderTopLeftRadius: 24, borderTopRightRadius: 24,
+    padding: 20, paddingBottom: 36,
+    gap: 14,
+    maxHeight: '85%',
   },
-  modalHandle: { width: 36, height: 4, backgroundColor: '#2a2a2a', borderRadius: 2, alignSelf: 'center', marginBottom: 16 },
+  modalHandle: { width: 36, height: 4, backgroundColor: '#2a2a2a', borderRadius: 2, alignSelf: 'center', marginBottom: 4 },
 
-  sheetHeaderRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16 },
-  sheetTitleRow: { flexDirection: 'row', alignItems: 'baseline', gap: 8, marginBottom: 6 },
-  sheetTitle: { fontSize: 20, fontWeight: '800', color: colors.white, letterSpacing: -0.4 },
+  sheetHeaderRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' },
+  sheetTitleRow: { flexDirection: 'row', alignItems: 'baseline', gap: 10 },
+  sheetTitle: { fontSize: 22, fontWeight: '800', color: colors.white, letterSpacing: -0.5 },
   sheetDate: { fontSize: 13, color: '#444', fontWeight: '600' },
-  sheetTypeBadge: { alignSelf: 'flex-start', paddingVertical: 5, paddingHorizontal: 10, borderRadius: 100 },
-  sheetTypeBadgeText: { fontSize: 11, fontWeight: '700' },
-  sheetProgress: { alignItems: 'center', backgroundColor: '#1a1a1a', borderRadius: 12, paddingVertical: 8, paddingHorizontal: 14 },
-  sheetProgressNum: { fontSize: 18, fontWeight: '900', color: colors.white },
+  sheetTypeBadge: { alignSelf: 'flex-start', paddingVertical: 6, paddingHorizontal: 12, borderRadius: 100 },
+  sheetTypeBadgeText: { fontSize: 12, fontWeight: '700' },
+  sheetProgress: { alignItems: 'center', backgroundColor: '#1a1a1a', borderRadius: 10, paddingVertical: 7, paddingHorizontal: 14 },
+  sheetProgressNum: { fontSize: 17, fontWeight: '900', color: colors.white },
   sheetProgressLabel: { fontSize: 9, color: '#444', fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.5 },
 
-  taskList: { maxHeight: 260, marginBottom: 12 },
-  noTasksText: { fontSize: 13, color: '#333', fontStyle: 'italic', paddingVertical: 16, textAlign: 'center' },
+  tasksLabel: { fontSize: 10, color: '#444', fontWeight: '700', textTransform: 'uppercase', letterSpacing: 1.5 },
 
+  taskListScroll: { maxHeight: 300 },
+
+  emptyTasksCard: { paddingVertical: 18, alignItems: 'center' },
+  noTasksText: { fontSize: 13, color: '#333', fontStyle: 'italic' },
+
+  // Grouped task card
+  taskCard: {
+    backgroundColor: '#1a1a1a', borderRadius: 12, overflow: 'hidden',
+  },
   taskRow: {
     flexDirection: 'row', alignItems: 'center', gap: 10,
-    paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: '#1a1a1a',
+    paddingVertical: 11, paddingHorizontal: 14,
+    borderBottomWidth: 1, borderBottomColor: '#222',
   },
-  taskColorBar: { width: 3, height: 20, borderRadius: 2 },
+  taskColorBar: { width: 3, alignSelf: 'stretch', borderRadius: 2 },
   taskCheck: {
-    width: 22, height: 22, borderRadius: 7, borderWidth: 1.5, borderColor: '#2a2a2a',
+    width: 20, height: 20, borderRadius: 6, borderWidth: 1.5, borderColor: '#444',
+    alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+  },
+  taskCheckDone: { backgroundColor: colors.revenue, borderColor: colors.revenue },
+  taskCheckMark: { fontSize: 10, fontWeight: '900', color: colors.black },
+  taskRowText: { fontSize: 14, color: '#ccc', fontWeight: '500' },
+  taskRowTextDone: { color: '#444', textDecorationLine: 'line-through' },
+  taskRowNotes: { fontSize: 11, color: '#555', fontStyle: 'italic', marginTop: 2 },
+  taskDel: { padding: 6 },
+  taskDelText: { fontSize: 12, color: '#2a2a2a', fontWeight: '700' },
+
+  // Add form (expanded)
+  addFormCard: {
+    backgroundColor: '#161616', borderRadius: 12,
+    padding: 14, gap: 10, marginTop: 4,
+    borderWidth: 1, borderColor: '#222',
+  },
+  colorRow: { flexDirection: 'row', gap: 8, alignItems: 'center' },
+  colorDot: { width: 22, height: 22, borderRadius: 11, borderWidth: 2, borderColor: 'transparent', alignItems: 'center', justifyContent: 'center' },
+  colorDotSelected: { borderColor: colors.white, transform: [{ scale: 1.15 }] },
+  addInput: {
+    backgroundColor: '#1e1e1e', borderRadius: 10,
+    paddingVertical: 11, paddingHorizontal: 14,
+    fontSize: 14, color: colors.white,
+    borderWidth: 1, borderColor: '#2a2a2a',
+  },
+  addFormActions: { flexDirection: 'row', gap: 8, marginTop: 2 },
+  cancelAddBtn: {
+    flex: 1, height: 44, backgroundColor: '#1e1e1e', borderRadius: 10,
+    alignItems: 'center', justifyContent: 'center',
+    borderWidth: 1, borderColor: '#2a2a2a',
+  },
+  cancelAddText: { fontSize: 13, fontWeight: '600', color: '#555' },
+  confirmAddBtn: {
+    flex: 2, height: 44, backgroundColor: '#2a2a2a', borderRadius: 10,
     alignItems: 'center', justifyContent: 'center',
   },
-  taskCheckDone: { backgroundColor: colors.white, borderColor: colors.white },
-  taskCheckMark: { fontSize: 11, fontWeight: '900', color: colors.black },
-  taskRowText: { flex: 1, fontSize: 14, color: '#ccc', fontWeight: '500' },
-  taskRowTextDone: { color: '#333', textDecorationLine: 'line-through' },
-  taskDel: { padding: 4 },
-  taskDelText: { fontSize: 11, color: '#333', fontWeight: '700' },
+  confirmAddText: { fontSize: 13, fontWeight: '700', color: colors.white },
 
-  addSection: { borderTopWidth: 1, borderTopColor: '#1a1a1a', paddingTop: 12 },
-  colorRow: { flexDirection: 'row', gap: 8, alignItems: 'center', marginBottom: 0 },
-  colorDot: { width: 22, height: 22, borderRadius: 11, borderWidth: 2, alignItems: 'center', justifyContent: 'center' },
-  addRow: { flexDirection: 'row', gap: 8, alignItems: 'center' },
-  addInput: {
-    flex: 1, backgroundColor: '#1a1a1a', borderRadius: 12,
-    padding: 13, fontSize: 14, color: colors.white, borderWidth: 1, borderColor: '#2a2a2a',
+  // Collapsed add button (dashed)
+  addTaskBtn: {
+    height: 46, borderRadius: 10,
+    borderWidth: 1, borderColor: '#222', borderStyle: 'dashed',
+    backgroundColor: '#161616',
+    alignItems: 'center', justifyContent: 'center',
   },
-  addBtn: {
-    width: 46, height: 46, backgroundColor: colors.white,
-    borderRadius: 12, alignItems: 'center', justifyContent: 'center',
+  addTaskBtnText: { fontSize: 13, fontWeight: '600', color: '#444' },
+
+  // Save button
+  saveBtn: {
+    height: 50, backgroundColor: colors.white, borderRadius: 12,
+    alignItems: 'center', justifyContent: 'center',
   },
-  addBtnDisabled: { opacity: 0.3 },
-  addBtnText: { fontSize: 22, fontWeight: '700', color: colors.black },
+  saveBtnText: { fontSize: 15, fontWeight: '700', color: colors.black },
 });

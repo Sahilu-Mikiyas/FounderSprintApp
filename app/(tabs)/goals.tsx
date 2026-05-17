@@ -21,7 +21,7 @@ interface Goal {
   category: string;
   deadline: string;
   financial_target: number | null;
-  current_amount: number;
+  current_amount: number | null;
   motivation: string | null;
   is_pinned: boolean;
   status: string;
@@ -67,6 +67,10 @@ function subSaved(subs: Goal[]) {
   return subs.reduce((s, g) => s + (g.current_amount ?? 0), 0);
 }
 
+function safeAmount(v: number | null) {
+  return v ?? 0;
+}
+
 function parentProgress(goal: Goal, subs: Goal[]) {
   if (subs.length > 0) {
     const budget = subBudget(subs);
@@ -74,7 +78,7 @@ function parentProgress(goal: Goal, subs: Goal[]) {
     return Math.min(Math.round((subSaved(subs) / budget) * 100), 100);
   }
   if (!goal.financial_target) return 0;
-  return Math.min(Math.round((goal.current_amount / goal.financial_target) * 100), 100);
+  return Math.min(Math.round((safeAmount(goal.current_amount) / goal.financial_target) * 100), 100);
 }
 
 // ─── Component ───────────────────────────────────────────────────────────────
@@ -268,14 +272,21 @@ export default function GoalsScreen() {
   async function markGoalComplete(id: string) {
     await supabase.from('goals').update({ status: 'completed' }).eq('id', id);
     setGoals((prev) => prev.map((g) => g.id === id ? { ...g, status: 'completed' } : g));
+    setSelectedGoal((p) => p ? { ...p, status: 'completed' } : p);
     setShowDetail(false);
+  }
+
+  async function reopenGoal(id: string) {
+    await supabase.from('goals').update({ status: 'active' }).eq('id', id);
+    setGoals((prev) => prev.map((g) => g.id === id ? { ...g, status: 'active' } : g));
+    setSelectedGoal((p) => p ? { ...p, status: 'active' } : p);
   }
 
   // ─── Log saving ────────────────────────────────────────────────────────────
 
   function openLog(goal: Goal) {
     setLogTarget(goal);
-    setLogAmount(String(goal.current_amount || ''));
+    setLogAmount(goal.current_amount != null ? String(goal.current_amount) : '');
     setShowLog(true);
   }
 
@@ -333,7 +344,7 @@ export default function GoalsScreen() {
             const subs = subsOf(pinned.id);
             const meta = catMeta(pinned.category);
             const budget = subs.length > 0 ? subBudget(subs) : (pinned.financial_target ?? 0);
-            const saved = subs.length > 0 ? subSaved(subs) : pinned.current_amount;
+            const saved = subs.length > 0 ? subSaved(subs) : safeAmount(pinned.current_amount);
             const pct = budget > 0 ? Math.min(Math.round((saved / budget) * 100), 100) : 0;
             const doneSubs = subs.filter((s) => s.status === 'completed').length;
             const preview = subs.slice(0, 3);
@@ -396,7 +407,7 @@ export default function GoalsScreen() {
                 {catGoals.map((goal) => {
                   const subs = subsOf(goal.id);
                   const budget = subs.length > 0 ? subBudget(subs) : (goal.financial_target ?? 0);
-                  const saved = subs.length > 0 ? subSaved(subs) : goal.current_amount;
+                  const saved = subs.length > 0 ? subSaved(subs) : safeAmount(goal.current_amount);
                   const pct = budget > 0 ? Math.min(Math.round((saved / budget) * 100), 100) : 0;
                   const doneSubs = subs.filter((s) => s.status === 'completed').length;
                   const dl = daysLeft(goal.deadline);
@@ -453,14 +464,19 @@ export default function GoalsScreen() {
               {completedParents.map((goal) => {
                 const meta = catMeta(goal.category);
                 return (
-                  <View key={goal.id} style={[styles.goalCard, { opacity: 0.45 }]}>
+                  <TouchableOpacity
+                    key={goal.id}
+                    style={[styles.goalCard, { opacity: 0.5 }]}
+                    onPress={() => { setSelectedGoal(goal); setShowDetail(true); }}
+                    activeOpacity={0.7}
+                  >
                     <View style={[styles.goalAccent, { backgroundColor: meta.color }]} />
                     <View style={styles.goalCardInner}>
                       <Text style={[styles.goalCatLabel, { color: meta.color }]}>✅ {meta.label}</Text>
                       <Text style={styles.goalName}>{goal.name}</Text>
                       <Text style={styles.goalDeadline}>📅 {fmtDeadline(goal.deadline)}</Text>
                     </View>
-                  </View>
+                  </TouchableOpacity>
                 );
               })}
             </View>
@@ -486,7 +502,7 @@ export default function GoalsScreen() {
             const subs = subsOf(selectedGoal.id);
             const meta = catMeta(selectedGoal.category);
             const budget = subs.length > 0 ? subBudget(subs) : (selectedGoal.financial_target ?? 0);
-            const saved = subs.length > 0 ? subSaved(subs) : selectedGoal.current_amount;
+            const saved = subs.length > 0 ? subSaved(subs) : safeAmount(selectedGoal.current_amount);
             const remaining = Math.max(0, budget - saved);
             const pct = budget > 0 ? Math.min(Math.round((saved / budget) * 100), 100) : 0;
             const doneSubs = subs.filter((s) => s.status === 'completed').length;
@@ -597,8 +613,8 @@ export default function GoalsScreen() {
 
                   {subs.map((sub) => {
                     const subMeta = catMeta(sub.category);
-                    const subRemaining = Math.max(0, (sub.financial_target ?? 0) - sub.current_amount);
-                    const subPct = sub.financial_target ? Math.min(Math.round((sub.current_amount / sub.financial_target) * 100), 100) : 0;
+                    const subRemaining = Math.max(0, (sub.financial_target ?? 0) - safeAmount(sub.current_amount));
+                    const subPct = sub.financial_target ? Math.min(Math.round((safeAmount(sub.current_amount) / sub.financial_target) * 100), 100) : 0;
                     const isDone = sub.status === 'completed';
                     return (
                       <View key={sub.id} style={[styles.subCard, isDone && styles.subCardDone]}>
@@ -625,8 +641,8 @@ export default function GoalsScreen() {
                               </View>
                               <View style={styles.subStatBlock}>
                                 <Text style={styles.subStatLabel}>Saved</Text>
-                                <Text style={[styles.subStatValue, { color: isDone ? colors.revenue : sub.current_amount > 0 ? colors.revenue : '#444' }]}>
-                                  ${sub.current_amount.toLocaleString()}
+                                <Text style={[styles.subStatValue, { color: isDone ? colors.revenue : safeAmount(sub.current_amount) > 0 ? colors.revenue : '#444' }]}>
+                                  ${safeAmount(sub.current_amount).toLocaleString()}
                                 </Text>
                               </View>
                               <View style={styles.subStatBlock}>
@@ -671,14 +687,18 @@ export default function GoalsScreen() {
 
                   {/* Action row */}
                   <View style={styles.detailActions}>
-                    {(subs.length === 0) && (
+                    {selectedGoal.status === 'active' && subs.length === 0 && (
                       <TouchableOpacity style={styles.logBtn} onPress={() => openLog(selectedGoal)}>
                         <Text style={styles.logBtnText}>+ Log Saving</Text>
                       </TouchableOpacity>
                     )}
-                    {selectedGoal.status === 'active' && (
+                    {selectedGoal.status === 'active' ? (
                       <TouchableOpacity style={styles.completeBtn} onPress={() => markGoalComplete(selectedGoal.id)}>
                         <Text style={styles.completeBtnText}>Mark Achieved 🏆</Text>
+                      </TouchableOpacity>
+                    ) : (
+                      <TouchableOpacity style={styles.reopenBtn} onPress={() => reopenGoal(selectedGoal.id)}>
+                        <Text style={styles.reopenBtnText}>↩ Reopen Goal</Text>
                       </TouchableOpacity>
                     )}
                     <TouchableOpacity style={styles.deleteBtn} onPress={() => deleteGoal(selectedGoal.id, true)}>
@@ -1036,6 +1056,8 @@ const styles = StyleSheet.create({
   logBtnText: { fontSize: 13, fontWeight: '700', color: colors.black },
   completeBtn: { flex: 1, height: 46, backgroundColor: '#0d0d0d', borderWidth: 1, borderColor: colors.revenue, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
   completeBtnText: { fontSize: 12, fontWeight: '700', color: colors.revenue },
+  reopenBtn: { flex: 1, height: 46, backgroundColor: '#0d0d0d', borderWidth: 1, borderColor: '#444', borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
+  reopenBtnText: { fontSize: 12, fontWeight: '700', color: '#888' },
   deleteBtn: { width: 46, height: 46, backgroundColor: '#0d0d0d', borderWidth: 1, borderColor: '#2a2a2a', borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
   deleteBtnText: { fontSize: 16 },
 

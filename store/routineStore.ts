@@ -31,9 +31,12 @@ export interface RoutineAlarm {
 interface RoutineStore {
   categories: RoutineCategory[];
   items: RoutineItem[];
-  alarms: RoutineAlarm[]; // all alarms for all items
+  alarms: RoutineAlarm[];
+  completions: string[]; // item_ids completed today
   loading: boolean;
   fetchAll: (userId: string) => Promise<void>;
+  fetchCompletions: (userId: string) => Promise<void>;
+  toggleCompletion: (userId: string, itemId: string) => Promise<void>;
   // Categories
   addCategory: (userId: string, name: string, color: string) => Promise<void>;
   updateCategory: (id: string, name: string, color: string) => Promise<void>;
@@ -53,7 +56,33 @@ export const useRoutineStore = create<RoutineStore>((set, get) => ({
   categories: [],
   items: [],
   alarms: [],
+  completions: [],
   loading: false,
+
+  fetchCompletions: async (userId: string) => {
+    const today = new Date().toISOString().split('T')[0];
+    const { data } = await supabase
+      .from('routine_completions')
+      .select('item_id')
+      .eq('user_id', userId)
+      .eq('completed_on', today);
+    set({ completions: (data ?? []).map((r: { item_id: string }) => r.item_id) });
+  },
+
+  toggleCompletion: async (userId: string, itemId: string) => {
+    const today = new Date().toISOString().split('T')[0];
+    const { completions } = get();
+    const isDone = completions.includes(itemId);
+    if (isDone) {
+      await supabase.from('routine_completions')
+        .delete().eq('user_id', userId).eq('item_id', itemId).eq('completed_on', today);
+      set({ completions: completions.filter((id) => id !== itemId) });
+    } else {
+      await supabase.from('routine_completions')
+        .insert({ user_id: userId, item_id: itemId, completed_on: today });
+      set({ completions: [...completions, itemId] });
+    }
+  },
 
   fetchAll: async (userId: string) => {
     set({ loading: true });
@@ -71,6 +100,7 @@ export const useRoutineStore = create<RoutineStore>((set, get) => ({
       alarms: (alarms ?? []).map(({ routine_items: _ri, ...a }) => a) as RoutineAlarm[],
       loading: false,
     });
+    get().fetchCompletions(userId);
   },
 
   addCategory: async (userId, name, color) => {
