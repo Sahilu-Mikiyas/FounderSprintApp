@@ -20,13 +20,13 @@ const FILTERS: { label: string; id: string | null }[] = [
   { label: '🗂️ Admin', id: 'admin' },
 ];
 
-const COLOR_TAGS = [
-  { key: 'green',  color: '#22C55E' },
-  { key: 'blue',   color: '#3B82F6' },
-  { key: 'yellow', color: '#EAB308' },
-  { key: 'red',    color: '#EF4444' },
-  { key: 'purple', color: '#A855F7' },
-  { key: 'orange', color: '#F97316' },
+const TASK_TYPES = [
+  { key: 'deep_work', label: '🎯 Deep Work', color: '#A855F7' },
+  { key: 'outreach',  label: '📨 Outreach',  color: '#F97316' },
+  { key: 'content',   label: '🎬 Content',   color: '#3B82F6' },
+  { key: 'review',    label: '📊 Review',    color: '#EAB308' },
+  { key: 'learning',  label: '📚 Learning',  color: '#06B6D4' },
+  { key: 'admin',     label: '🗂 Admin',     color: '#888888' },
 ];
 
 const PHASE_LABELS = ['Foundation', 'Build', 'Momentum'];
@@ -59,7 +59,7 @@ function modeLabel(mode: string) {
 }
 
 function colorOf(key: string | null) {
-  return COLOR_TAGS.find((c) => c.key === key)?.color ?? null;
+  return TASK_TYPES.find((t) => t.key === key)?.color ?? null;
 }
 
 export default function SprintScreen() {
@@ -318,30 +318,29 @@ export default function SprintScreen() {
                   {/* FOCUS TASKS label */}
                   <Text style={styles.tasksLabel}>Focus Tasks</Text>
 
-                  {/* Task list — grouped card */}
+                  {/* Existing task list — scroll only the list */}
                   <ScrollView
                     style={styles.taskListScroll}
                     showsVerticalScrollIndicator={false}
                     keyboardShouldPersistTaps="handled"
+                    nestedScrollEnabled
                   >
-                    {editTasks.length === 0 && !showAddForm && (
+                    {editTasks.length === 0 && (
                       <View style={styles.emptyTasksCard}>
-                        <Text style={styles.noTasksText}>No tasks yet</Text>
+                        <Text style={styles.noTasksText}>No tasks yet — add one below</Text>
                       </View>
                     )}
-
                     {editTasks.length > 0 && (
                       <View style={styles.taskCard}>
                         {editTasks.map((task, i) => {
                           const barColor = colorOf(task.color_tag);
+                          const typeLabel = TASK_TYPES.find((t) => t.key === task.color_tag)?.label;
                           return (
                             <View
                               key={task.id}
                               style={[styles.taskRow, i === editTasks.length - 1 && { borderBottomWidth: 0 }]}
                             >
-                              {barColor && (
-                                <View style={[styles.taskColorBar, { backgroundColor: barColor }]} />
-                              )}
+                              {barColor && <View style={[styles.taskColorBar, { backgroundColor: barColor }]} />}
                               <TouchableOpacity
                                 style={[styles.taskCheck, task.is_done && styles.taskCheckDone]}
                                 onPress={() => toggleDayTask(editDay.id, task.id)}
@@ -353,6 +352,9 @@ export default function SprintScreen() {
                                 <Text style={[styles.taskRowText, task.is_done && styles.taskRowTextDone]}>
                                   {task.title}
                                 </Text>
+                                {typeLabel && !task.is_done && (
+                                  <Text style={[styles.taskRowNotes, { color: barColor ?? '#555' }]}>{typeLabel}</Text>
+                                )}
                                 {task.notes ? (
                                   <Text style={styles.taskRowNotes} numberOfLines={1}>{task.notes}</Text>
                                 ) : null}
@@ -369,79 +371,77 @@ export default function SprintScreen() {
                         })}
                       </View>
                     )}
-
-                    {/* Expanded add-task form */}
-                    {showAddForm && (
-                      <View style={styles.addFormCard}>
-                        {/* Color chips */}
-                        <View style={styles.colorRow}>
-                          <TouchableOpacity
-                            style={[styles.colorDot, { backgroundColor: '#1e1e1e', borderColor: selectedColor === '' ? colors.white : '#2a2a2a' }]}
-                            onPress={() => setSelectedColor('')}
-                          >
-                            {selectedColor === '' && <Text style={{ fontSize: 8, color: '#666' }}>✕</Text>}
-                          </TouchableOpacity>
-                          {COLOR_TAGS.map((ct) => (
-                            <TouchableOpacity
-                              key={ct.key}
-                              style={[
-                                styles.colorDot,
-                                { backgroundColor: ct.color },
-                                selectedColor === ct.key && styles.colorDotSelected,
-                              ]}
-                              onPress={() => setSelectedColor(ct.key)}
-                            />
-                          ))}
-                        </View>
-
-                        {/* Title input */}
-                        <TextInput
-                          ref={titleInputRef}
-                          style={styles.addInput}
-                          value={newTaskTitle}
-                          onChangeText={setNewTaskTitle}
-                          placeholder="Task title..."
-                          placeholderTextColor="#444"
-                          returnKeyType="next"
-                          autoFocus
-                        />
-
-                        {/* Notes input */}
-                        <TextInput
-                          style={[styles.addInput, { marginTop: 8, fontSize: 13, color: '#888' }]}
-                          value={newTaskNotes}
-                          onChangeText={setNewTaskNotes}
-                          placeholder="Notes (optional)..."
-                          placeholderTextColor="#333"
-                          returnKeyType="done"
-                          onSubmitEditing={handleAddTask}
-                        />
-
-                        {/* Add + Cancel */}
-                        <View style={styles.addFormActions}>
-                          <TouchableOpacity
-                            style={styles.cancelAddBtn}
-                            onPress={() => { setShowAddForm(false); setNewTaskTitle(''); setNewTaskNotes(''); setSelectedColor(''); }}
-                          >
-                            <Text style={styles.cancelAddText}>Cancel</Text>
-                          </TouchableOpacity>
-                          <TouchableOpacity
-                            style={[styles.confirmAddBtn, (!newTaskTitle.trim() || addingTask) && { opacity: 0.4 }]}
-                            onPress={handleAddTask}
-                            disabled={!newTaskTitle.trim() || addingTask}
-                            activeOpacity={0.8}
-                          >
-                            {addingTask
-                              ? <ActivityIndicator color={colors.black} size="small" />
-                              : <Text style={styles.confirmAddText}>Add Task</Text>}
-                          </TouchableOpacity>
-                        </View>
-                      </View>
-                    )}
                   </ScrollView>
 
-                  {/* Dashed "+ Add focus task" button — hidden when form is open */}
-                  {!showAddForm && (
+                  {/* Add form — OUTSIDE the scroll, always visible above buttons */}
+                  {showAddForm ? (
+                    <View style={styles.addFormCard}>
+                      {/* Task type chips */}
+                      <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                        <View style={styles.typeChipRow}>
+                          <TouchableOpacity
+                            style={[styles.typeChip, selectedColor === '' && styles.typeChipActive]}
+                            onPress={() => setSelectedColor('')}
+                          >
+                            <Text style={[styles.typeChipText, selectedColor === '' && styles.typeChipTextActive]}>None</Text>
+                          </TouchableOpacity>
+                          {TASK_TYPES.map((tt) => (
+                            <TouchableOpacity
+                              key={tt.key}
+                              style={[
+                                styles.typeChip,
+                                selectedColor === tt.key && { backgroundColor: `${tt.color}20`, borderColor: tt.color },
+                              ]}
+                              onPress={() => setSelectedColor(tt.key)}
+                            >
+                              <View style={[styles.typeChipDot, { backgroundColor: tt.color }]} />
+                              <Text style={[styles.typeChipText, selectedColor === tt.key && { color: tt.color }]}>
+                                {tt.label}
+                              </Text>
+                            </TouchableOpacity>
+                          ))}
+                        </View>
+                      </ScrollView>
+
+                      <TextInput
+                        ref={titleInputRef}
+                        style={styles.addInput}
+                        value={newTaskTitle}
+                        onChangeText={setNewTaskTitle}
+                        placeholder="Task title..."
+                        placeholderTextColor="#444"
+                        returnKeyType="next"
+                        autoFocus
+                      />
+                      <TextInput
+                        style={[styles.addInput, { marginTop: 6, fontSize: 13, color: '#888' }]}
+                        value={newTaskNotes}
+                        onChangeText={setNewTaskNotes}
+                        placeholder="Notes (optional)..."
+                        placeholderTextColor="#333"
+                        returnKeyType="done"
+                        onSubmitEditing={handleAddTask}
+                      />
+                      <View style={styles.addFormActions}>
+                        <TouchableOpacity
+                          style={styles.cancelAddBtn}
+                          onPress={() => { setShowAddForm(false); setNewTaskTitle(''); setNewTaskNotes(''); setSelectedColor(''); }}
+                        >
+                          <Text style={styles.cancelAddText}>Cancel</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                          style={[styles.confirmAddBtn, (!newTaskTitle.trim() || addingTask) && { opacity: 0.4 }]}
+                          onPress={handleAddTask}
+                          disabled={!newTaskTitle.trim() || addingTask}
+                          activeOpacity={0.8}
+                        >
+                          {addingTask
+                            ? <ActivityIndicator color={colors.black} size="small" />
+                            : <Text style={styles.confirmAddText}>Add Task</Text>}
+                        </TouchableOpacity>
+                      </View>
+                    </View>
+                  ) : (
                     <TouchableOpacity
                       style={styles.addTaskBtn}
                       onPress={() => setShowAddForm(true)}
@@ -451,7 +451,6 @@ export default function SprintScreen() {
                     </TouchableOpacity>
                   )}
 
-                  {/* Save Tasks white button */}
                   <TouchableOpacity style={styles.saveBtn} onPress={closeSheet} activeOpacity={0.85}>
                     <Text style={styles.saveBtnText}>Save Tasks</Text>
                   </TouchableOpacity>
@@ -578,9 +577,12 @@ const styles = StyleSheet.create({
     padding: 14, gap: 10, marginTop: 4,
     borderWidth: 1, borderColor: '#222',
   },
-  colorRow: { flexDirection: 'row', gap: 8, alignItems: 'center' },
-  colorDot: { width: 22, height: 22, borderRadius: 11, borderWidth: 2, borderColor: 'transparent', alignItems: 'center', justifyContent: 'center' },
-  colorDotSelected: { borderColor: colors.white, transform: [{ scale: 1.15 }] },
+  typeChipRow: { flexDirection: 'row', gap: 6, paddingBottom: 2 },
+  typeChip: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingVertical: 6, paddingHorizontal: 10, borderRadius: 100, backgroundColor: '#1e1e1e', borderWidth: 1, borderColor: '#2a2a2a' },
+  typeChipActive: { backgroundColor: '#2a2a2a', borderColor: '#444' },
+  typeChipDot: { width: 7, height: 7, borderRadius: 4 },
+  typeChipText: { fontSize: 11, fontWeight: '600', color: '#555' },
+  typeChipTextActive: { color: colors.white },
   addInput: {
     backgroundColor: '#1e1e1e', borderRadius: 10,
     paddingVertical: 11, paddingHorizontal: 14,
