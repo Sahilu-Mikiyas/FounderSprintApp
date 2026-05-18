@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity,
-  StyleSheet, ActivityIndicator, Modal,
+  StyleSheet, ActivityIndicator, Modal, Alert,
   TextInput, KeyboardAvoidingView, Platform, RefreshControl,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -116,11 +116,15 @@ export default function SprintScreen() {
   async function handleAddTask() {
     if (!editDay || !newTaskTitle.trim() || !user) return;
     setAddingTask(true);
-    await addDayTask(user.id, editDay.id, newTaskTitle.trim(), newTaskNotes.trim(), selectedColor);
-    setNewTaskTitle('');
-    setNewTaskNotes('');
-    setSelectedColor('');
-    setShowAddForm(false);
+    try {
+      await addDayTask(user.id, editDay.id, newTaskTitle.trim(), newTaskNotes.trim(), selectedColor);
+      setNewTaskTitle('');
+      setNewTaskNotes('');
+      setSelectedColor('');
+      setShowAddForm(false);
+    } catch (e: any) {
+      Alert.alert('Failed to save task', e?.message ?? 'Unknown error');
+    }
     setAddingTask(false);
   }
 

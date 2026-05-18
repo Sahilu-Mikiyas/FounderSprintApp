@@ -172,11 +172,12 @@ export const useRoutineStore = create<RoutineStore>((set, get) => ({
   },
 
   addAlarm: async (itemId, itemTitle, hour, minute, frequency) => {
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from('routine_alarms')
       .insert({ routine_item_id: itemId, hour, minute, frequency, is_active: true })
       .select()
       .single();
+    if (error) throw new Error(error.message);
     if (data) {
       await scheduleRoutineAlarm(data.id, itemTitle, hour, minute, frequency);
       set((s) => ({ alarms: [...s.alarms, data] }));

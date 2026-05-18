@@ -7,6 +7,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuthStore } from '../../store/authStore';
 import { useRoutineStore, RoutineItem, RoutineAlarm } from '../../store/routineStore';
+import { requestLocalNotificationPermissions } from '../../lib/notifications';
 import { colors } from '../../lib/colors';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -175,10 +176,26 @@ export default function RoutinesScreen() {
   async function handleAddAlarm() {
     if (!alarmItem) return;
     setSavingAlarm(true);
-    // Convert 12h to 24h
+
+    const granted = await requestLocalNotificationPermissions();
+    if (!granted) {
+      Alert.alert(
+        'Notifications Required',
+        'Please allow notifications in your device settings to set alarms.',
+      );
+      setSavingAlarm(false);
+      return;
+    }
+
     let hour24 = newAlarmHour % 12;
     if (newAlarmAmPm === 'PM') hour24 += 12;
-    await addAlarm(alarmItem.id, alarmItem.title, hour24, newAlarmMin, newAlarmFreq);
+
+    try {
+      await addAlarm(alarmItem.id, alarmItem.title, hour24, newAlarmMin, newAlarmFreq);
+      setShowAlarmEditor(false);
+    } catch (e: any) {
+      Alert.alert('Failed to save alarm', e?.message ?? 'Unknown error. Make sure the routine_alarms table exists in Supabase.');
+    }
     setSavingAlarm(false);
   }
 

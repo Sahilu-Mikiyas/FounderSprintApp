@@ -14,6 +14,17 @@ Notifications.setNotificationHandler({
   }),
 });
 
+export async function requestLocalNotificationPermissions(): Promise<boolean> {
+  try {
+    const { status: existing } = await Notifications.getPermissionsAsync();
+    if (existing === 'granted') return true;
+    const { status } = await Notifications.requestPermissionsAsync();
+    return status === 'granted';
+  } catch {
+    return false;
+  }
+}
+
 export async function registerForPushNotifications(): Promise<string | null> {
   try {
     if (!Device.isDevice) return null;
@@ -136,45 +147,42 @@ export async function scheduleRoutineAlarm(
   minute: number,
   frequency: 'daily' | 'weekdays' | 'weekends',
 ) {
-  try {
-    const identifier = `routine-alarm-${alarmId}`;
-    await Notifications.cancelScheduledNotificationAsync(identifier).catch(() => {});
+  const identifier = `routine-alarm-${alarmId}`;
+  await Notifications.cancelScheduledNotificationAsync(identifier).catch(() => {});
 
-    if (frequency === 'daily') {
+  if (frequency === 'daily') {
+    await Notifications.scheduleNotificationAsync({
+      identifier,
+      content: {
+        title: `Routine reminder 🔔`,
+        body: itemTitle,
+        sound: true,
+      },
+      trigger: {
+        type: Notifications.SchedulableTriggerInputTypes.DAILY,
+        hour,
+        minute,
+      },
+    });
+  } else {
+    const days = frequency === 'weekdays' ? [2, 3, 4, 5, 6] : [1, 7];
+    for (const weekday of days) {
       await Notifications.scheduleNotificationAsync({
-        identifier,
+        identifier: `${identifier}-${weekday}`,
         content: {
           title: `Routine reminder 🔔`,
           body: itemTitle,
           sound: true,
         },
         trigger: {
-          type: Notifications.SchedulableTriggerInputTypes.DAILY,
+          type: Notifications.SchedulableTriggerInputTypes.WEEKLY,
+          weekday,
           hour,
           minute,
         },
       });
-    } else {
-      // weekdays: Mon-Fri (2-6), weekends: Sat-Sun (1,7)
-      const days = frequency === 'weekdays' ? [2, 3, 4, 5, 6] : [1, 7];
-      for (const weekday of days) {
-        await Notifications.scheduleNotificationAsync({
-          identifier: `${identifier}-${weekday}`,
-          content: {
-            title: `Routine reminder 🔔`,
-            body: itemTitle,
-            sound: true,
-          },
-          trigger: {
-            type: Notifications.SchedulableTriggerInputTypes.WEEKLY,
-            weekday,
-            hour,
-            minute,
-          },
-        });
-      }
     }
-  } catch {}
+  }
 }
 
 export async function cancelRoutineAlarms(alarmId: string) {

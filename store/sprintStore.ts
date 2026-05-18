@@ -238,7 +238,7 @@ export const useSprintStore = create<SprintStore>((set, get) => ({
   addDayTask: async (userId: string, dayId: string, title: string, notes = '', colorTag = '') => {
     const { dayTasks } = get();
     const existing = dayTasks[dayId] ?? [];
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from('sprint_day_tasks')
       .insert({
         user_id: userId,
@@ -251,6 +251,7 @@ export const useSprintStore = create<SprintStore>((set, get) => ({
       })
       .select()
       .single();
+    if (error) throw new Error(error.message);
     if (data) {
       set((s) => ({ dayTasks: { ...s.dayTasks, [dayId]: [...(s.dayTasks[dayId] ?? []), data] } }));
     }

@@ -61,10 +61,24 @@ alter table sprint_days enable row level security;
 create policy "Users can manage own sprint days" on sprint_days
   for all using (auth.uid() = user_id);
 
+-- ROUTINE CATEGORIES
+create table if not exists routine_categories (
+  id uuid default gen_random_uuid() primary key,
+  user_id uuid references auth.users on delete cascade not null,
+  name text not null,
+  color text not null default '#22C55E',
+  sort_order int default 0,
+  created_at timestamptz default now()
+);
+alter table routine_categories enable row level security;
+create policy "Users can manage own routine categories" on routine_categories
+  for all using (auth.uid() = user_id);
+
 -- ROUTINE ITEMS
 create table if not exists routine_items (
   id uuid default gen_random_uuid() primary key,
   user_id uuid references auth.users on delete cascade not null,
+  category_id uuid references routine_categories on delete set null,
   title text not null,
   duration_minutes int,
   sort_order int default 0,
@@ -74,13 +88,33 @@ alter table routine_items enable row level security;
 create policy "Users can manage own routine" on routine_items
   for all using (auth.uid() = user_id);
 
+-- ROUTINE ALARMS
+create table if not exists routine_alarms (
+  id uuid default gen_random_uuid() primary key,
+  routine_item_id uuid references routine_items on delete cascade not null,
+  hour int not null,
+  minute int not null,
+  frequency text check (frequency in ('daily', 'weekdays', 'weekends')) not null default 'daily',
+  is_active boolean default true,
+  created_at timestamptz default now()
+);
+alter table routine_alarms enable row level security;
+create policy "Users can manage own alarms" on routine_alarms
+  for all using (
+    exists (
+      select 1 from routine_items
+      where routine_items.id = routine_alarms.routine_item_id
+        and routine_items.user_id = auth.uid()
+    )
+  );
+
 -- ROUTINE COMPLETIONS (per day)
 create table if not exists routine_completions (
   id uuid default gen_random_uuid() primary key,
   user_id uuid references auth.users on delete cascade not null,
-  routine_item_id uuid references routine_items on delete cascade not null,
+  item_id uuid references routine_items on delete cascade not null,
   completed_on date not null,
-  unique(routine_item_id, completed_on)
+  unique(item_id, completed_on)
 );
 alter table routine_completions enable row level security;
 create policy "Users can manage own completions" on routine_completions
