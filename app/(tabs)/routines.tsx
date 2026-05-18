@@ -191,7 +191,7 @@ export default function RoutinesScreen() {
     if (newAlarmAmPm === 'PM') hour24 += 12;
 
     try {
-      await addAlarm(alarmItem.id, alarmItem.title, hour24, newAlarmMin, newAlarmFreq);
+      await addAlarm(user.id, alarmItem.id, alarmItem.title, hour24, newAlarmMin, newAlarmFreq);
       setShowAlarmEditor(false);
     } catch (e: any) {
       Alert.alert('Failed to save alarm', e?.message ?? 'Unknown error. Make sure the routine_alarms table exists in Supabase.');

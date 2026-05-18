@@ -47,7 +47,7 @@ interface RoutineStore {
   deleteItem: (id: string) => Promise<void>;
   reorderItems: (items: RoutineItem[]) => Promise<void>;
   // Alarms
-  addAlarm: (itemId: string, itemTitle: string, hour: number, minute: number, frequency: 'daily' | 'weekdays' | 'weekends') => Promise<void>;
+  addAlarm: (userId: string, itemId: string, itemTitle: string, hour: number, minute: number, frequency: 'daily' | 'weekdays' | 'weekends') => Promise<void>;
   toggleAlarm: (alarmId: string) => Promise<void>;
   deleteAlarm: (alarmId: string) => Promise<void>;
 }
@@ -171,10 +171,10 @@ export const useRoutineStore = create<RoutineStore>((set, get) => ({
     );
   },
 
-  addAlarm: async (itemId, itemTitle, hour, minute, frequency) => {
+  addAlarm: async (userId, itemId, itemTitle, hour, minute, frequency) => {
     const { data, error } = await supabase
       .from('routine_alarms')
-      .insert({ routine_item_id: itemId, hour, minute, frequency, is_active: true })
+      .insert({ user_id: userId, routine_item_id: itemId, hour, minute, frequency, is_active: true })
       .select()
       .single();
     if (error) throw new Error(error.message);
