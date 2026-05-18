@@ -110,7 +110,7 @@ export const useSprintStore = create<SprintStore>((set, get) => ({
     ] = await Promise.all([
       supabase.from('sprint_days').select('*').eq('sprint_id', sprint.id).order('day_number'),
       supabase.from('routine_items').select('*').eq('user_id', userId).order('sort_order'),
-      supabase.from('routine_completions').select('routine_item_id').eq('user_id', userId).eq('completed_on', todayStr),
+      supabase.from('routine_completions').select('item_id').eq('user_id', userId).eq('completed_on', todayStr),
       supabase.from('pause_log').select('id').eq('user_id', userId).eq('sprint_id', sprint.id).eq('week_number', getWeekNumber(new Date())),
     ]);
 
@@ -121,7 +121,7 @@ export const useSprintStore = create<SprintStore>((set, get) => ({
       today: todayDay,
       sprintDays: allDays ?? [],
       routine: routine ?? [],
-      completions: completions?.map((c) => c.routine_item_id) ?? [],
+      completions: completions?.map((c) => c.item_id) ?? [],
       pausesThisWeek: pauses?.length ?? 0,
       loading: false,
     });
