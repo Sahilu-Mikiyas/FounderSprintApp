@@ -56,7 +56,7 @@ interface SprintStore {
   markDayDone: (userId: string) => Promise<void>;
   updateDayTask: (dayId: string, title: string, notes: string) => Promise<void>;
   fetchDayTasks: (dayId: string) => Promise<void>;
-  addDayTask: (dayId: string, title: string, notes?: string, colorTag?: string) => Promise<void>;
+  addDayTask: (userId: string, dayId: string, title: string, notes?: string, colorTag?: string) => Promise<void>;
   toggleDayTask: (dayId: string, taskId: string) => Promise<void>;
   deleteDayTask: (dayId: string, taskId: string) => Promise<void>;
   updateDayTaskItem: (dayId: string, taskId: string, title: string, notes: string) => Promise<void>;
@@ -235,12 +235,13 @@ export const useSprintStore = create<SprintStore>((set, get) => ({
     set((s) => ({ dayTasks: { ...s.dayTasks, [dayId]: data ?? [] } }));
   },
 
-  addDayTask: async (dayId: string, title: string, notes = '', colorTag = '') => {
+  addDayTask: async (userId: string, dayId: string, title: string, notes = '', colorTag = '') => {
     const { dayTasks } = get();
     const existing = dayTasks[dayId] ?? [];
     const { data } = await supabase
       .from('sprint_day_tasks')
       .insert({
+        user_id: userId,
         sprint_day_id: dayId,
         title,
         notes: notes || null,

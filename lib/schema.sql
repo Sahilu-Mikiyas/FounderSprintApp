@@ -172,6 +172,22 @@ alter table goal_milestones enable row level security;
 create policy "Users can manage own milestones" on goal_milestones
   for all using (auth.uid() = user_id);
 
+-- SPRINT DAY TASKS (multiple tasks per day, separate from the day's main task)
+create table if not exists sprint_day_tasks (
+  id uuid default gen_random_uuid() primary key,
+  sprint_day_id uuid references sprint_days on delete cascade not null,
+  user_id uuid references auth.users on delete cascade not null,
+  title text not null,
+  notes text,
+  is_done boolean default false,
+  sort_order int default 0,
+  color_tag text,
+  created_at timestamptz default now()
+);
+alter table sprint_day_tasks enable row level security;
+create policy "Users can manage own day tasks" on sprint_day_tasks
+  for all using (auth.uid() = user_id);
+
 -- PAUSE LOG
 create table if not exists pause_log (
   id uuid default gen_random_uuid() primary key,

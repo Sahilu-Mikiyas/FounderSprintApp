@@ -427,9 +427,9 @@ export default function RoutinesScreen() {
 
       {/* ─── Alarm editor ─────────────────────────────────────────────────── */}
       <Modal visible={showAlarmEditor} transparent animationType="slide" onRequestClose={() => setShowAlarmEditor(false)}>
-        <View style={styles.modalOverlay}>
-          <TouchableOpacity style={styles.modalBg} onPress={() => setShowAlarmEditor(false)} activeOpacity={1} />
-          <ScrollView style={styles.alarmSheet} contentContainerStyle={{ paddingBottom: 40 }}>
+        <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.65)', justifyContent: 'flex-end' }}>
+          <TouchableOpacity style={{ flex: 1 }} onPress={() => setShowAlarmEditor(false)} activeOpacity={1} />
+          <ScrollView style={styles.alarmSheet} contentContainerStyle={{ paddingBottom: 40 }} keyboardShouldPersistTaps="handled">
             <View style={styles.sheetHandle} />
             <Text style={styles.sheetTitle}>Alarms — {alarmItem?.title}</Text>
 

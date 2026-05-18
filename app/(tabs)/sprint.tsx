@@ -114,9 +114,9 @@ export default function SprintScreen() {
   }
 
   async function handleAddTask() {
-    if (!editDay || !newTaskTitle.trim()) return;
+    if (!editDay || !newTaskTitle.trim() || !user) return;
     setAddingTask(true);
-    await addDayTask(editDay.id, newTaskTitle.trim(), newTaskNotes.trim(), selectedColor);
+    await addDayTask(user.id, editDay.id, newTaskTitle.trim(), newTaskNotes.trim(), selectedColor);
     setNewTaskTitle('');
     setNewTaskNotes('');
     setSelectedColor('');
