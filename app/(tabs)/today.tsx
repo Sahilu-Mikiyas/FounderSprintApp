@@ -12,14 +12,26 @@ import { colors } from '../../lib/colors';
 import { getDayTypeStyle, getSprintProgress, getDayNumber, formatGreeting, formatDate } from '../../lib/utils';
 import { AnimatedProgressBar } from '../../components/AnimatedProgressBar';
 
-const COLOR_TAG_MAP: Record<string, string> = {
-  green: '#22C55E',
-  blue: '#3B82F6',
-  yellow: '#EAB308',
-  red: '#EF4444',
-  purple: '#A855F7',
-  orange: '#F97316',
+const TASK_TYPE_MAP: Record<string, { label: string; color: string; emoji: string }> = {
+  deep_work: { label: 'Deep Work',  color: '#A855F7', emoji: '🎯' },
+  outreach:  { label: 'Outreach',   color: '#F97316', emoji: '📨' },
+  content:   { label: 'Content',    color: '#3B82F6', emoji: '🎬' },
+  review:    { label: 'Review',     color: '#EAB308', emoji: '📊' },
+  learning:  { label: 'Learning',   color: '#06B6D4', emoji: '📚' },
+  admin:     { label: 'Admin',      color: '#888888', emoji: '🗂' },
+  // legacy color names
+  green:     { label: 'Task',       color: '#22C55E', emoji: '✅' },
+  blue:      { label: 'Task',       color: '#3B82F6', emoji: '📋' },
+  purple:    { label: 'Task',       color: '#A855F7', emoji: '📋' },
+  orange:    { label: 'Task',       color: '#F97316', emoji: '📋' },
+  yellow:    { label: 'Task',       color: '#EAB308', emoji: '📋' },
+  red:       { label: 'Task',       color: '#EF4444', emoji: '📋' },
 };
+
+function getTaskColor(colorTag: string | null): string {
+  if (!colorTag) return '#555';
+  return TASK_TYPE_MAP[colorTag]?.color ?? '#555';
+}
 
 export default function TodayScreen() {
   const router = useRouter();
@@ -152,17 +164,25 @@ export default function TodayScreen() {
 
           {/* ── Today's Tasks card ── */}
           <View>
-            <View style={styles.sectionRow}>
-              <Text style={styles.sectionTitle}>🎯 Today's Tasks</Text>
-              {taskTotal > 0 && (
-                <Text style={styles.sectionCount}>{taskDone} / {taskTotal} done</Text>
-              )}
-            </View>
             <View style={styles.card}>
+              {/* Card header */}
+              <View style={styles.taskCardHeader}>
+                <Text style={styles.taskCardTitle}>
+                  {dayStyle.emoji} {dayStyle.label} Tasks
+                </Text>
+                {taskTotal > 0 && (
+                  <View style={[styles.taskDoneBadge, { backgroundColor: `${colors.revenue}18`, borderColor: `${colors.revenue}40` }]}>
+                    <Text style={[styles.taskDoneBadgeText, { color: colors.revenue }]}>
+                      {taskDone} / {taskTotal} done
+                    </Text>
+                  </View>
+                )}
+              </View>
+
               {/* Progress bar */}
               {taskTotal > 0 && (
                 <View style={styles.taskPctTrack}>
-                  <AnimatedProgressBar pct={taskPct} color={dayStyle.color} height={3} delay={400} />
+                  <AnimatedProgressBar pct={taskPct} color={colors.revenue} height={3} delay={400} />
                 </View>
               )}
 
@@ -170,7 +190,7 @@ export default function TodayScreen() {
                 <Text style={styles.cardEmpty}>No tasks yet — tap a day in Sprint to add some</Text>
               ) : (
                 tasks.map((task, i) => {
-                  const barColor = task.color_tag ? (COLOR_TAG_MAP[task.color_tag] ?? '#333') : null;
+                  const color = getTaskColor(task.color_tag);
                   return (
                     <TouchableOpacity
                       key={task.id}
@@ -178,8 +198,11 @@ export default function TodayScreen() {
                       onPress={() => today && toggleDayTask(today.id, task.id)}
                       activeOpacity={0.7}
                     >
-                      {barColor && <View style={[styles.taskColorBar, { backgroundColor: barColor }]} />}
-                      <View style={[styles.taskCheck, task.is_done && styles.taskCheckOn]}>
+                      <View style={[styles.taskColorBar, { backgroundColor: color }]} />
+                      <View style={[
+                        styles.taskCheck,
+                        task.is_done && { backgroundColor: color, borderColor: color },
+                      ]}>
                         {task.is_done && <Text style={styles.taskCheckMark}>✓</Text>}
                       </View>
                       <View style={{ flex: 1 }}>
@@ -340,22 +363,31 @@ const styles = StyleSheet.create({
   cardEmpty: { fontSize: 14, color: '#333', fontStyle: 'italic', padding: 16 },
 
   // Tasks
-  taskPctTrack: { height: 3, backgroundColor: '#1e1e1e', overflow: 'hidden' },
+  taskCardHeader: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    paddingHorizontal: 14, paddingTop: 14, paddingBottom: 10,
+  },
+  taskCardTitle: { fontSize: 14, fontWeight: '800', color: colors.white, letterSpacing: -0.2 },
+  taskDoneBadge: {
+    paddingVertical: 4, paddingHorizontal: 10, borderRadius: 20,
+    borderWidth: 1,
+  },
+  taskDoneBadgeText: { fontSize: 11, fontWeight: '700' },
+  taskPctTrack: { height: 3, backgroundColor: '#1a1a1a', overflow: 'hidden', marginBottom: 2 },
   taskRow: {
     flexDirection: 'row', alignItems: 'center', gap: 10,
-    paddingVertical: 11, paddingHorizontal: 14,
+    paddingVertical: 13, paddingHorizontal: 14,
     borderBottomWidth: 1, borderBottomColor: '#151515',
   },
-  taskColorBar: { width: 3, alignSelf: 'stretch', borderRadius: 2 },
+  taskColorBar: { width: 3, alignSelf: 'stretch', borderRadius: 2, flexShrink: 0 },
   taskCheck: {
-    width: 20, height: 20, borderRadius: 6, borderWidth: 1.5, borderColor: '#2a2a2a',
+    width: 22, height: 22, borderRadius: 7, borderWidth: 1.5, borderColor: '#2a2a2a',
     alignItems: 'center', justifyContent: 'center', flexShrink: 0,
   },
-  taskCheckOn: { backgroundColor: colors.white, borderColor: colors.white },
-  taskCheckMark: { fontSize: 10, fontWeight: '900', color: colors.black },
-  taskText: { fontSize: 14, color: '#ccc', fontWeight: '500' },
+  taskCheckMark: { fontSize: 11, fontWeight: '900', color: colors.black },
+  taskText: { fontSize: 14, color: colors.white, fontWeight: '600' },
   taskTextDone: { color: '#333', textDecorationLine: 'line-through' },
-  taskNotes: { fontSize: 11, color: '#555', fontStyle: 'italic', marginTop: 2 },
+  taskNotes: { fontSize: 12, color: '#555', fontStyle: 'italic', marginTop: 3 },
 
   // Routine
   routineRow: {
